@@ -148,11 +148,52 @@ emacs -batch -L . -l ert -l psl-ts-mode.el -l psl-ts-mode-test.el \
   -f ert-run-tests-batch-and-exit
 ```
 
+## Diagnostics
+
+`psl-ts-mode-flycheck.el` provides optional [Flycheck](https://www.flycheck.org/)
+diagnostics when Flycheck is installed.  It loads automatically — no extra
+configuration required.
+
+### Always-on AST lint (`psl-treesit` checker)
+
+Runs synchronously on the live tree-sitter AST, requires no external tool:
+
+- **Syntax errors** — any `ERROR` or missing node in the parse tree is reported
+  at `error` level.
+- **Unclocked directives** — `assert`/`assume`/`cover`/`restrict` directives
+  that have no `default clock is …` in the enclosing unit and no inline
+  `@ clock` expression are reported at `warning` level.  GHDL requires all
+  PSL assertions to be clocked.
+
+### Optional GHDL semantic check (`psl-ghdl` checker)
+
+Runs `ghdl -a -fpsl` when `psl-ts-mode-ghdl-design-files` is non-nil.
+Configure per project via `.dir-locals.el`:
+
+```elisp
+((psl-ts-mode
+  . ((psl-ts-mode-ghdl-design-files . ("../src/dut.vhd"))
+     (psl-ts-mode-ghdl-std          . "08"))))
+```
+
+| Variable                          | Default  | Meaning                                      |
+|-----------------------------------|----------|----------------------------------------------|
+| `psl-ts-mode-ghdl-executable`     | `"ghdl"` | Path to the GHDL binary.                     |
+| `psl-ts-mode-ghdl-std`            | `"08"`   | VHDL standard (`"93"`, `"08"`, …).           |
+| `psl-ts-mode-ghdl-design-files`   | `nil`    | VHDL files to analyze alongside the `.psl`.  |
+| `psl-ts-mode-ghdl-top-entity`     | `nil`    | Top entity name (not yet used).              |
+
+**GHDL limitations:** GHDL can only check PSL that is bound to a VHDL design
+(signals, ports, clocks must be resolvable).  Standalone `.psl` files without
+a design context will produce unresolved-identifier errors.  GHDL also requires
+all assertions to be clocked and repetition ranges to be static integer
+literals.
+
 ## Not yet supported
 
 - PSL embedded inside VHDL (`-- psl ...` comments, inline `vunit` in `.vhd`).
 - Verilog / SystemVerilog flavors of PSL.
-- LSP / flycheck / completion integration.
+- LSP / completion integration.
 
 ## License
 

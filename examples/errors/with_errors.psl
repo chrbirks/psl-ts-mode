@@ -1,0 +1,21 @@
+-- with_errors.psl — deliberate errors to exercise the psl-treesit AST lint checker.
+-- Open this file with flycheck-mode on and run M-x flycheck-list-errors.
+
+-- ================================================================= syntax error
+-- The $$$INVALID token is not valid PSL; the parser emits an ERROR node.
+vunit syntax_error_unit (dut) {
+  default clock is rising_edge(clk);
+  assert always $$$INVALID;
+}
+
+-- ================================================================= unclocked directives
+-- No `default clock is ...` and no `@ clock` expression.
+-- The psl-treesit checker warns on each directive below.
+vunit unclocked_unit (dut) {
+  property p is always (req -> eventually! grant);
+  sequence s is {req; ack};
+  assert p;
+  assume always (not (overflow and underflow));
+  cover s;
+  restrict {reset[*3]};
+}

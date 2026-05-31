@@ -136,5 +136,47 @@
           (should-not
            (treesit-node-check root 'has-error)))))))
 
+;;;; AST lint helper tests (no Flycheck or external tools required)
+
+(ert-deftest psl-ts-test-directive-clocked-with-default-clock ()
+  "A directive inside a vunit that has `default clock' is considered clocked."
+  (psl-ts-test--with-buffer
+      "vunit u (top) {\n  default clock is rising_edge(clk);\n  assert always req;\n}\n"
+    (let* ((root (treesit-buffer-root-node))
+           (dir (treesit-search-subtree
+                 root
+                 (lambda (n) (string= (treesit-node-type n) "assert_directive")))))
+      (should dir)
+      (should (psl-ts-mode--directive-clocked-p dir)))))
+
+(ert-deftest psl-ts-test-directive-unclocked-without-default-clock ()
+  "A directive inside a vunit without `default clock' is not clocked."
+  (psl-ts-test--with-buffer
+      "vunit u (top) {\n  assert always req;\n}\n"
+    (let* ((root (treesit-buffer-root-node))
+           (dir (treesit-search-subtree
+                 root
+                 (lambda (n) (string= (treesit-node-type n) "assert_directive")))))
+      (should dir)
+      (should-not (psl-ts-mode--directive-clocked-p dir)))))
+
+(ert-deftest psl-ts-test-directive-clocked-inline ()
+  "A directive whose property is directly a clocked_property is considered clocked."
+  (psl-ts-test--with-buffer
+      "vunit u (top) {\n  assert (req -> next ack) @ rising_edge(clk);\n}\n"
+    (let* ((root (treesit-buffer-root-node))
+           (dir (treesit-search-subtree
+                 root
+                 (lambda (n) (string= (treesit-node-type n) "assert_directive")))))
+      (should dir)
+      (should (psl-ts-mode--directive-clocked-p dir)))))
+
+(ert-deftest psl-ts-test-syntax-error-produces-error-node ()
+  "A buffer with a syntax error should have an ERROR node in the tree."
+  (psl-ts-test--with-buffer
+      "vunit u (top) {\n  assert $$$INVALID;\n}\n"
+    (let ((root (treesit-buffer-root-node)))
+      (should (treesit-node-check root 'has-error)))))
+
 (provide 'psl-ts-mode-test)
 ;;; psl-ts-mode-test.el ends here

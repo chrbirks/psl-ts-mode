@@ -32,7 +32,10 @@
 ;; standalone \".psl\" files.
 ;;
 ;; Features: syntax highlighting, indentation, and imenu/navigation for
-;; verification units, properties and sequences.
+;; verification units, properties and sequences.  Optional Flycheck
+;; diagnostics (syntax errors and GHDL-compatibility warnings) are
+;; provided by `psl-ts-mode-flycheck.el', which is loaded automatically
+;; when Flycheck is present.
 ;;
 ;; Setup:
 ;;
@@ -53,6 +56,7 @@
 (declare-function treesit-parser-create "treesit.c")
 (declare-function treesit-node-type "treesit.c")
 (declare-function treesit-node-child-by-field-name "treesit.c")
+(declare-function treesit-node-parent "treesit.c")
 
 (defgroup psl-ts nil
   "Major mode for PSL (Property Specification Language) using tree-sitter."
@@ -201,6 +205,32 @@ Uses `psl-ts-mode-grammar-source' as the grammar location."
    (treesit-node-child-by-field-name node "name")
    t))
 
+;;;; AST helpers (used by psl-ts-mode-flycheck.el and tests)
+
+(defconst psl-ts-mode--clocked-directive-types
+  '("assert_directive" "assume_directive" "cover_directive" "restrict_directive")
+  "PSL directive node types that GHDL requires to be clocked.")
+
+(defun psl-ts-mode--find-ancestor (node type)
+  "Return the nearest ancestor of NODE with tree-sitter node type TYPE, or nil."
+  (let ((parent (treesit-node-parent node)))
+    (while (and parent (not (string= (treesit-node-type parent) type)))
+      (setq parent (treesit-node-parent parent)))
+    parent))
+
+(defun psl-ts-mode--directive-clocked-p (directive)
+  "Return non-nil if DIRECTIVE is covered by a clock.
+A directive is clocked if its enclosing verification_unit has a
+`default_clock' declaration, or if its property operand is directly
+a `clocked_property' or `clocked_sere' node."
+  (or
+   (when-let ((vunit (psl-ts-mode--find-ancestor directive "verification_unit")))
+     (treesit-search-subtree
+      vunit
+      (lambda (n) (string= (treesit-node-type n) "default_clock"))))
+   (when-let ((prop (treesit-node-child-by-field-name directive "property")))
+     (member (treesit-node-type prop) '("clocked_property" "clocked_sere")))))
+
 ;;;; Mode
 
 ;;;###autoload
@@ -245,6 +275,9 @@ Uses `psl-ts-mode-grammar-source' as the grammar location."
 
 ;;;###autoload
 (add-to-list 'auto-mode-alist '("\\.psl\\'" . psl-ts-mode))
+
+(with-eval-after-load 'flycheck
+  (require 'psl-ts-mode-flycheck nil t))
 
 (provide 'psl-ts-mode)
 ;;; psl-ts-mode.el ends here
