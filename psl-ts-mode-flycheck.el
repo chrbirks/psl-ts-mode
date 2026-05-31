@@ -41,12 +41,6 @@
 
 ;;;; Project config
 
-(defcustom psl-ts-mode-ghdl-executable "ghdl"
-  "Path to the GHDL executable used by the `psl-ghdl' checker."
-  :type 'string
-  :safe #'stringp
-  :group 'psl-ts)
-
 (defcustom psl-ts-mode-ghdl-std "08"
   "VHDL standard passed to GHDL via --std=.  Common values: \"93\", \"08\"."
   :type 'string
@@ -150,7 +144,7 @@ warnings for unclocked directives.  No external tool required."
   "Check PSL semantics using GHDL.
 Requires `psl-ts-mode-ghdl-design-files' to be set.  GHDL analyzes
 all design files alongside the current buffer file."
-  :command ((eval psl-ts-mode-ghdl-executable)
+  :command ("ghdl"  ; override path via M-x customize flycheck-psl-ghdl-executable
             "-a"
             (eval (concat "--std=" psl-ts-mode-ghdl-std))
             "-fpsl"

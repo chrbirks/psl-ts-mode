@@ -178,7 +178,7 @@ Configure per project via `.dir-locals.el`:
 
 | Variable                          | Default  | Meaning                                      |
 |-----------------------------------|----------|----------------------------------------------|
-| `psl-ts-mode-ghdl-executable`     | `"ghdl"` | Path to the GHDL binary.                     |
+| `flycheck-psl-ghdl-executable`    | `"ghdl"` | Path to the GHDL binary (set by Flycheck).   |
 | `psl-ts-mode-ghdl-std`            | `"08"`   | VHDL standard (`"93"`, `"08"`, …).           |
 | `psl-ts-mode-ghdl-design-files`   | `nil`    | VHDL files to analyze alongside the `.psl`.  |
 | `psl-ts-mode-ghdl-top-entity`     | `nil`    | Top entity name (not yet used).              |
