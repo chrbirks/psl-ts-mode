@@ -1,0 +1,42 @@
+{
+  "name": "tree-sitter-psl",
+  "version": "0.1.0",
+  "description": "PSL (Property Specification Language, IEEE 1850) grammar for tree-sitter",
+  "license": "GPL-3.0",
+  "keywords": [
+    "tree-sitter",
+    "parser",
+    "psl",
+    "property-specification-language",
+    "vhdl",
+    "hardware-verification"
+  ],
+  "main": "bindings/node",
+  "scripts": {
+    "generate": "tree-sitter generate",
+    "test": "tree-sitter test",
+    "parse": "tree-sitter parse"
+  },
+  "dependencies": {
+    "node-addon-api": "^8.0.0",
+    "node-gyp-build": "^4.8.0"
+  },
+  "devDependencies": {
+    "tree-sitter-cli": "^0.24.0"
+  },
+  "peerDependencies": {
+    "tree-sitter": "^0.21.0"
+  },
+  "peerDependenciesMeta": {
+    "tree-sitter": {
+      "optional": true
+    }
+  },
+  "files": [
+    "grammar.js",
+    "binding.gyp",
+    "bindings/**",
+    "queries/**",
+    "src/**"
+  ]
+}

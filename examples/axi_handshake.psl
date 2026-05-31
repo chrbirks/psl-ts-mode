@@ -1,0 +1,104 @@
+-- AXI-style handshake verification unit (PSL / IEEE 1850, VHDL flavor).
+-- Demonstrates: |->, |=>, next_event(...)(...), counted next[N],
+-- eventually!, clocked @ properties.
+
+vunit axi_handshake_props (axi_rtl) {
+
+  default clock is rising_edge(aclk);
+
+  -- ------------------------------------------------------------------ signals
+  -- tvalid, tready : std_logic  (AXI-Stream handshake)
+  -- req, ack       : std_logic  (generic req/ack)
+  -- areset_n       : std_logic  (active-low reset)
+
+  -- ---------------------------------------------------------------- handshake rules
+
+  -- A transfer occurs on every cycle where valid and ready are both high.
+  property valid_ready_transfer is
+    always (tvalid and tready -> next stable(tdata));
+
+  -- valid must not deassert until ready acknowledges.
+  property valid_stable_until_ready is
+    {tvalid; not tready[*]; tready} |-> {stable(tvalid)[*]};
+
+  -- After a transfer, ready may go low for at most 3 cycles.
+  property ready_deassert_limit is
+    {tready; not tready[*1 to 3]; tready} |=> tready;
+
+  -- --------------------------------------------------------- next_event usage
+
+  -- After the next rising edge of tvalid, tready must be high within 2 cycles.
+  property ready_after_valid is
+    next_event(tvalid)(next[2] tready);
+
+  -- After the next falling edge of tvalid (tvalid goes low), check stability.
+  property stable_after_valid_fall is
+    next_event(not tvalid)(stable(tdata));
+
+  -- next_event_a: for ALL occurrences of tvalid, tready must follow.
+  property all_valid_get_ready is
+    next_event_a(tvalid)(eventually! tready);
+
+  -- next_event_e: there EXISTS an occurrence of tvalid after which tready holds.
+  property some_valid_gets_ready is
+    next_event_e(tvalid)(tready);
+
+  -- -------------------------------------------------------- counted next
+
+  -- Two cycles after req, ack must be asserted.
+  property req_ack_latency_2 is
+    always (req -> next[2] ack);
+
+  -- Within 4 cycles of req, ack must arrive.
+  property req_ack_within_4 is
+    always (req -> next_event(ack)(ack));
+
+  -- -------------------------------------------------------- eventually!
+
+  -- Every request is eventually acknowledged.
+  property req_eventually_ack is
+    always (req -> eventually! ack);
+
+  -- --------------------------------------------------- clocked @ properties
+
+  -- These properties are checked against the falling edge of aclk.
+  property valid_low_after_reset is
+    (not areset_n -> next (not tvalid)) @ falling_edge(aclk);
+
+  property ready_low_after_reset is
+    (not areset_n -> next (not tready)) @ falling_edge(aclk);
+
+  -- ---------------------------------------------------------------- assertions
+
+  assert valid_ready_transfer
+    report "AXI: data changed during un-acknowledged transfer";
+
+  assert valid_stable_until_ready
+    report "AXI: tvalid deasserted before tready";
+
+  assert ready_after_valid
+    report "AXI: tready not seen within 2 cycles after tvalid";
+
+  assert all_valid_get_ready
+    report "AXI: some tvalid occurrence never got tready";
+
+  assert req_eventually_ack
+    report "AXI: req never acknowledged";
+
+  assert valid_low_after_reset
+    report "AXI: tvalid not deasserted after reset (falling edge)";
+
+  -- -------------------------------------------------------------------- covers
+
+  cover {req; ack}
+    report "AXI: back-to-back req/ack";
+
+  cover {tvalid; tready}
+    report "AXI: simultaneous valid and ready";
+
+  -- ------------------------------------------------------------------ fairness
+
+  fairness ack;
+  fairness tready;
+
+}

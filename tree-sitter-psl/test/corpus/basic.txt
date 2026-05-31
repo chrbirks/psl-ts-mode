@@ -1,0 +1,124 @@
+================================================================================
+Verification unit with default clock
+================================================================================
+
+vunit u (top) {
+  default clock is rising_edge(clk);
+  assert always a;
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (verification_unit
+    (identifier)
+    (inherit_clause
+      (identifier))
+    (default_clock
+      (indexed_name
+        (identifier)
+        (identifier)))
+    (assert_directive
+      (unary_temporal
+        (temporal_unary_op)
+        (identifier)))))
+
+================================================================================
+Assert with report clause
+================================================================================
+
+assert always (a -> b) report "msg";
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (assert_directive
+    (unary_temporal
+      (temporal_unary_op)
+      (paren_property
+        (logical_implication
+          (identifier)
+          (identifier))))
+    (report_clause
+      (string_literal))))
+
+================================================================================
+Suffix implication with SERE
+================================================================================
+
+assert {req; ack} |=> {grant[*2]};
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (assert_directive
+    (suffix_implication
+      (sere_concat
+        (identifier)
+        (identifier))
+      (sere_repetition
+        (identifier)
+        (repeat_count
+          (integer))))))
+
+================================================================================
+Property and sequence declarations
+================================================================================
+
+property p is always (a -> next b);
+sequence s is {a; b; c};
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (declaration
+    (property_declaration
+      (identifier)
+      (unary_temporal
+        (temporal_unary_op)
+        (paren_property
+          (logical_implication
+            (identifier)
+            (unary_temporal
+              (temporal_unary_op)
+              (identifier)))))))
+  (declaration
+    (sequence_declaration
+      (identifier)
+      (sere_concat
+        (sere_concat
+          (identifier)
+          (identifier))
+        (identifier)))))
+
+================================================================================
+Cover, assume, restrict, fairness directives
+================================================================================
+
+cover {a; b};
+assume always (reset -> not valid);
+restrict {reset[*3]};
+fairness grant;
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (cover_directive
+    (sere_concat
+      (identifier)
+      (identifier)))
+  (assume_directive
+    (unary_temporal
+      (temporal_unary_op)
+      (paren_property
+        (logical_implication
+          (identifier)
+          (unary_expression
+            (identifier))))))
+  (restrict_directive
+    (sere_repetition
+      (identifier)
+      (repeat_count
+        (integer))))
+  (fairness_directive
+    (identifier)))

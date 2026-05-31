@@ -1,0 +1,90 @@
+-- FIFO verification unit (PSL / IEEE 1850, VHDL flavor).
+-- Demonstrates: default clock, invariants, fill-level, req/ack handshake,
+-- |=> suffix implication, report strings.
+
+vunit fifo_props (fifo_rtl) {
+
+  default clock is rising_edge(clk);
+
+  -- ------------------------------------------------------------------ signals
+  -- fill_level : integer range 0 to DEPTH
+  -- push, pop  : std_logic
+  -- overflow, underflow : std_logic
+  -- req, ack   : std_logic
+  -- empty, full : std_logic
+
+  -- ---------------------------------------------------------------- invariants
+
+  -- Overflow and underflow are mutually exclusive.
+  property no_simultaneous_overflow_underflow is
+    always (not (overflow and underflow));
+
+  -- When full, push without pop must raise overflow next cycle.
+  property full_push_overflow is
+    always ((full and push and not pop) -> next overflow);
+
+  -- When empty, pop without push must raise underflow next cycle.
+  property empty_pop_underflow is
+    always ((empty and pop and not push) -> next underflow);
+
+  -- Fill level never exceeds DEPTH (represented as positive integer).
+  property fill_in_range is
+    always (fill_level >= 0 and fill_level <= depth);
+
+  -- ----------------------------------------------------------- req/ack handshake
+
+  -- Every request is eventually acknowledged.
+  property req_eventually_acked is
+    always (req -> eventually! ack);
+
+  -- Once req is asserted it stays high until ack (hold constraint).
+  property req_stable_until_ack is
+    {req; not ack[*]; ack} |-> {stable(req)[*]};
+
+  -- After ack, req may deassert the next cycle.
+  property ack_releases_req is
+    always (ack -> next (not req or req));
+
+  -- Handshake: request followed immediately by acknowledge produces data_valid.
+  property req_ack_data_valid is
+    {req; ack} |=> {data_valid[*1 to 2]};
+
+  -- ----------------------------------------------------------------- assertions
+
+  assert no_simultaneous_overflow_underflow
+    report "FIFO: overflow and underflow simultaneously asserted";
+
+  assert full_push_overflow
+    report "FIFO: push while full did not raise overflow";
+
+  assert empty_pop_underflow
+    report "FIFO: pop while empty did not raise underflow";
+
+  assert fill_in_range
+    report "FIFO: fill_level out of range";
+
+  assert req_eventually_acked
+    report "FIFO: request never acknowledged";
+
+  assert req_stable_until_ack
+    report "FIFO: req deasserted before ack";
+
+  assert req_ack_data_valid
+    report "FIFO: data_valid not raised after req/ack";
+
+  -- -------------------------------------------------------------------- covers
+
+  cover {push; pop}
+    report "FIFO: simultaneous push and pop";
+
+  cover {full; push}
+    report "FIFO: push while full";
+
+  cover {empty; pop}
+    report "FIFO: pop while empty";
+
+  -- ------------------------------------------------------------------ fairness
+
+  fairness ack;
+
+}

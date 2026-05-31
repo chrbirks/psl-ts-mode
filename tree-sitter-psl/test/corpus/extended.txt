@@ -1,0 +1,163 @@
+================================================================================
+Parameterized next with count
+================================================================================
+
+assert next[2] ack;
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (assert_directive
+    (unary_temporal
+      (temporal_unary_op)
+      (temporal_count
+        (integer))
+      (identifier))))
+
+================================================================================
+Parameterized next_a with range
+================================================================================
+
+assert next_a[1 to 4] ack;
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (assert_directive
+    (unary_temporal
+      (temporal_unary_op)
+      (temporal_count
+        (integer)
+        (integer))
+      (identifier))))
+
+================================================================================
+next_event property
+================================================================================
+
+assert next_event(valid)(ack);
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (assert_directive
+    property: (next_event_property
+      event: (identifier)
+      operand: (identifier))))
+
+================================================================================
+next_event with count
+================================================================================
+
+assert next_event_a(valid)[2](ack);
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (assert_directive
+    property: (next_event_property
+      event: (identifier)
+      (temporal_count
+        (integer))
+      operand: (identifier))))
+
+================================================================================
+forall simple
+================================================================================
+
+assert forall x : always x;
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (assert_directive
+    property: (replicated_property
+      param: (identifier)
+      property: (unary_temporal
+        operator: (temporal_unary_op)
+        operand: (identifier)))))
+
+================================================================================
+forall with range
+================================================================================
+
+assert forall n in {0 to 7} : always (n >= 0);
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (assert_directive
+    property: (replicated_property
+      param: (identifier)
+      (integer)
+      (integer)
+      property: (unary_temporal
+        operator: (temporal_unary_op)
+        operand: (paren_expression
+          (binary_expression
+            left: (identifier)
+            right: (integer)))))))
+
+================================================================================
+SERE union
+================================================================================
+
+cover {req union grant};
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (cover_directive
+    (sere_union
+      (identifier)
+      (identifier))))
+
+================================================================================
+Sequence as FL property (braced SERE assert)
+================================================================================
+
+assert {a; b};
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (assert_directive
+    (sere_concat
+      (identifier)
+      (identifier))))
+
+================================================================================
+Strong sequence
+================================================================================
+
+assert {req; ack}!;
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (assert_directive
+    (strong_sequence
+      (sere_concat
+        (identifier)
+        (identifier)))))
+
+================================================================================
+VHDL downto slice
+================================================================================
+
+assert always (data(7 downto 0) = x"FF");
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (assert_directive
+    (unary_temporal
+      (temporal_unary_op)
+      (paren_expression
+        (binary_expression
+          (indexed_name
+            (identifier)
+            (range_constraint
+              (integer)
+              (integer)))
+          (bit_string_literal))))))

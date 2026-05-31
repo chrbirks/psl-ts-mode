@@ -1,0 +1,124 @@
+-- FSM (Finite State Machine) verification unit (PSL / IEEE 1850, VHDL flavor).
+-- Demonstrates: named sequences, fusion (:), [=]/[->]/[*] with to ranges,
+-- within, abort.
+
+vunit fsm_props (fsm_rtl) {
+
+  default clock is rising_edge(clk);
+
+  -- ------------------------------------------------------------------ signals
+  -- state : std_logic_vector(2 downto 0)
+  -- idle, active, done, error_state : std_logic (decoded state bits)
+  -- start, stop, reset : std_logic
+  -- output_valid : std_logic
+  -- data_in : std_logic_vector(7 downto 0)
+
+  -- ----------------------------------------------------------- named sequences
+
+  -- Machine starts an operation.
+  sequence start_seq is
+    {idle; start};
+
+  -- Machine completes successfully.
+  sequence complete_seq is
+    {active[*1 to 8]; done};
+
+  -- Error recovery: error_state must be followed by reset then idle.
+  sequence error_recovery_seq is
+    {error_state; reset; idle};
+
+  -- ---------------------------------------------------------- sequence operators
+
+  -- Fusion (':'): start immediately fused with active (no gap).
+  sequence fused_start_active is
+    {idle : active};
+
+  -- Non-consecutive repetition [=]: data_in equals target exactly 3 times.
+  sequence data_seen_3_times is
+    {data_in = target[=3]};
+
+  -- Goto repetition [->]: data_in becomes valid at least once then done.
+  sequence data_then_done is
+    {output_valid[->1]; done};
+
+  -- Consecutive repetition with range [*]: active for 2 to 5 cycles.
+  sequence active_burst is
+    {active[*2 to 5]};
+
+  -- ---------------------------------------------------- within
+
+  -- The complete sequence must occur within a bounded window.
+  sequence complete_window is
+    {active[*]; done} within {start; active[*1 to 10]; done};
+
+  -- ------------------------------------------------------------------- abort
+
+  -- Normal completion must occur, but may be aborted by reset.
+  property complete_or_reset is
+    (eventually! done) abort reset;
+
+  -- Active state abort: if active, output_valid must follow unless error.
+  property active_output_or_error is
+    (eventually! output_valid) abort error_state;
+
+  -- Async abort: error can interrupt the requirement at any point.
+  property liveness_no_async_error is
+    (eventually! ack) async_abort error_state;
+
+  -- ----------------------------------------------------------------- invariants
+
+  -- FSM is always in exactly one state.
+  property one_hot_state is
+    always (idle or active or done or error_state);
+
+  -- After done, the machine returns to idle within 2 cycles.
+  property done_to_idle is
+    always (done -> next[2] idle);
+
+  -- Error state is always followed by reset.
+  property error_needs_reset is
+    always (error_state -> next reset);
+
+  -- Suffix implication using named sequences.
+  property start_leads_to_complete is
+    {start; active[*]} |=> {done};
+
+  -- ---------------------------------------------------------------- assertions
+
+  assert complete_or_reset
+    report "FSM: operation neither completed nor was reset";
+
+  assert one_hot_state
+    report "FSM: not in exactly one state";
+
+  assert done_to_idle
+    report "FSM: did not return to idle after done";
+
+  assert error_needs_reset
+    report "FSM: error state not followed by reset";
+
+  assert active_output_or_error
+    report "FSM: active but no output_valid and no error";
+
+  assert start_leads_to_complete
+    report "FSM: start did not lead to complete";
+
+  -- -------------------------------------------------------------------- covers
+
+  cover {start_seq; complete_seq}
+    report "FSM: normal start-to-complete path";
+
+  cover error_recovery_seq
+    report "FSM: error recovery path";
+
+  cover active_burst
+    report "FSM: sustained active burst";
+
+  cover complete_window
+    report "FSM: complete within window";
+
+  -- ------------------------------------------------------------------ fairness
+
+  strong fairness done, start;
+
+}

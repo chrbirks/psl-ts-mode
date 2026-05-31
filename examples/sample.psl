@@ -1,0 +1,36 @@
+-- Sample PSL (VHDL flavor) for exercising psl-ts-mode.
+-- IEEE 1850 Property Specification Language.
+
+vunit fifo_props (fifo_rtl) {
+
+  -- Clocking for the whole unit.
+  default clock is rising_edge(clk);
+
+  -- Simple invariant: never overflow and underflow simultaneously.
+  property no_overflow_underflow is
+    always (not (overflow and underflow));
+
+  -- A request must eventually be granted.
+  property req_grant is
+    always (req -> eventually! grant);
+
+  -- Sequence: two consecutive valid cycles.
+  sequence two_valid is
+    {valid; valid};
+
+  -- Suffix implication using a SERE antecedent.
+  property handshake is
+    {req; ack} |=> {data_valid[*2]};
+
+  assert no_overflow_underflow report "FIFO overflow/underflow";
+  assert req_grant;
+  assert handshake @ rising_edge(clk);
+
+  cover {req; ack; data_valid};
+
+  assume always (reset -> next (not valid));
+
+  restrict {reset[*3]};
+
+  fairness grant;
+}

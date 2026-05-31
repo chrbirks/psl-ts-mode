@@ -1,0 +1,213 @@
+-- all_constructs.psl — Dense PSL example exercising every major construct.
+-- PSL / IEEE 1850, VHDL flavor.
+
+/* Block comment: this file is intentionally dense.
+   It covers vunit/vmode/vprop/vpkg, endpoints, parameterized next,
+   next_event family, forall, all SERE ops including union and strong {..}!,
+   VHDL slices, all literal forms, and both comment styles. */
+
+-- ================================================================= vpkg
+-- Package-level shared declarations.
+vpkg shared_pkg {
+  property p_tpl is always true;
+  sequence s_tpl is {true};
+}
+
+-- ================================================================= vmode
+-- Mode unit: just constraints/assumptions.
+vmode constraint_mode (dut) {
+  default clock is rising_edge(clk);
+  assume always (not (overflow and underflow));
+  assume always (fill_level >= 0);
+}
+
+-- ================================================================= vprop
+-- Property unit: reusable temporal property.
+vprop liveness_prop (dut) {
+  default clock is rising_edge(clk);
+  property req_liveness is always (req -> eventually! ack);
+  assert req_liveness report "liveness: req never acked";
+}
+
+-- ================================================================= vunit (main)
+vunit all_constructs_props (dut) {
+
+  default clock is rising_edge(clk);
+
+  -- -------------------------------------------------------------- endpoint
+  endpoint req_ack_ep is {req; ack};
+  endpoint burst_ep   is {valid[*2 to 4]};
+
+  -- ------------------------------------------- literals of every kind
+
+  -- integer literals
+  property lit_int is always (fill_level >= 0);
+
+  -- real literal (used in expression context via identifier)
+  -- based literal: 16#FF# = 255
+  -- bit-string literals: x"FF" b"11111111" o"377"
+  property lit_based is always (data = 16#FF#);
+  property lit_bitstr_hex is always (mask = x"0F");
+  property lit_bitstr_bin is always (flags = b"1010");
+  property lit_bitstr_oct is always (octal_val = o"17");
+
+  -- boolean literals
+  property always_true_prop is always true;
+  property never_false_prop is never false;
+
+  -- ------------------------------------------- parameterized next / next_a / next_e
+
+  -- next[N]: check signal N cycles later
+  property next_2_ack is
+    always (req -> next[2] ack);
+
+  property next_a_range is
+    always (req -> next_a[1 to 4] ack);
+
+  property next_e_range is
+    always (req -> next_e[1 to 8] ack);
+
+  -- next! (strong)
+  property next_strong is
+    always (req -> next! ack);
+
+  -- ------------------------------------------- next_event family
+
+  -- next_event(b)(p): after the next occurrence of b, p holds
+  property ne_basic is
+    next_event(valid)(ack);
+
+  -- next_event!(b)(p): strong variant
+  property ne_strong is
+    next_event!(valid)(ack);
+
+  -- next_event_a(b)[k](p): for all occurrences within count k
+  property ne_a_counted is
+    next_event_a(valid)[2](ack);
+
+  -- next_event_a!(b)(p): strong, all occurrences
+  property ne_a_strong is
+    next_event_a!(valid)(eventually! ack);
+
+  -- next_event_e(b)(p): there exists an occurrence
+  property ne_e_basic is
+    next_event_e(valid)(ack);
+
+  -- next_event_e!(b)(p): strong, exists
+  property ne_e_strong is
+    next_event_e!(valid)(ack);
+
+  -- ------------------------------------------- forall
+
+  -- forall with anonymous boolean value set (identifier as boolean)
+  property forall_simple is
+    forall x : always (x -> eventually! ack);
+
+  -- forall with in {range}
+  property forall_range is
+    forall n in {0 to 7} : always (fill_level = n -> next fill_level >= 0);
+
+  -- forall with in {list of booleans}
+  property forall_list is
+    forall sig in {valid, ready, done} : always (sig -> next stable(sig));
+
+  -- ------------------------------------------- SERE operators
+
+  -- concat (;) and fusion (:)
+  sequence concat_seq is {req; ack; done};
+  sequence fused_seq  is {req : ack};
+
+  -- | (or)
+  sequence either_seq is {req | grant};
+
+  -- union
+  sequence union_seq is {req union grant};
+
+  -- & (intersection) and && (strong intersection)
+  sequence and_seq  is {valid & ready};
+  sequence sand_seq is {valid && ready};
+
+  -- within
+  sequence within_seq is {req within {active[*]}};
+
+  -- repetition operators
+  sequence star_seq    is {valid[*]};
+  sequence plus_seq    is {valid[+]};
+  sequence count_seq   is {valid[*2 to 4]};
+  sequence inf_seq     is {valid[*2 to inf]};
+  sequence goto_seq    is {valid[->2]};
+  sequence noncons_seq is {data_ok[=3]};
+
+  -- strong sequence: {..}!
+  property strong_seq_prop is
+    {req; ack}! -> eventually! done;
+
+  -- ------------------------------------------- VHDL slices
+
+  -- downto slice: sig(7 downto 0)
+  property slice_downto is
+    always (data_word(7 downto 0) = x"FF");
+
+  -- to slice: sig(0 to 3)
+  property slice_to is
+    always (nibble(0 to 3) = b"1111");
+
+  -- indexed (single element)
+  property bit_index is
+    always (flags(3) = true);
+
+  -- ------------------------------------------- abort variants
+
+  property guarded_live is
+    always (req -> (eventually! ack)) abort reset;
+
+  property async_guard is
+    always (req -> (eventually! ack)) async_abort error_flag;
+
+  property sync_guard is
+    always (req -> (eventually! ack)) sync_abort stop;
+
+  -- ------------------------------------------- logical connectives
+
+  property impl_prop is
+    always (a -> b);
+
+  property equiv_prop is
+    always (a <-> b);
+
+  property until_prop is
+    a until b;
+
+  property before_prop is
+    a before! b;
+
+  -- ------------------------------------------- clocked @
+
+  property clocked_at_fall is
+    (not reset -> next valid) @ falling_edge(clk);
+
+  -- ------------------------------------------- assertions / directives
+
+  assert always_true_prop;
+  assert next_2_ack        report "parameterized next[2] failed";
+  assert next_a_range      report "next_a range failed";
+  assert ne_basic          report "next_event basic failed";
+  assert ne_a_counted      report "next_event_a counted failed";
+  assert forall_simple     report "forall simple failed";
+  assert forall_range      report "forall range failed";
+  assert strong_seq_prop   report "strong sequence failed";
+  assert slice_downto      report "slice downto failed";
+  assert guarded_live      report "abort failed";
+
+  assume always (not (overflow and underflow));
+
+  cover concat_seq  report "concat sequence covered";
+  cover union_seq   report "union sequence covered";
+  cover strong_seq_prop report "strong seq prop covered";
+
+  restrict {reset[*3]};
+
+  fairness ack;
+  strong fairness valid, ready;
+
+}
