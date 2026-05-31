@@ -7,7 +7,7 @@
 ;; Version: 0.1.0
 ;; Package-Requires: ((emacs "29.1"))
 ;; Keywords: languages, tools, hardware, verification
-;; URL: https://github.com/chrbirks/emacs-psl-mode
+;; URL: https://github.com/chrbirks/psl-ts-mode
 
 ;; This file is not part of GNU Emacs.
 
@@ -66,7 +66,7 @@
   :group 'psl-ts)
 
 (defcustom psl-ts-mode-grammar-source
-  '("https://github.com/chrbirks/emacs-psl-mode"
+  '("https://github.com/chrbirks/psl-ts-mode"
     nil "tree-sitter-psl/src")
   "Source specification for the PSL tree-sitter grammar.
 A list of (URL REVISION SOURCE-DIR) suitable for
