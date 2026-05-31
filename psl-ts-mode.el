@@ -132,7 +132,7 @@ Uses `psl-ts-mode-grammar-source' as the grammar location."
    :language 'psl
    :feature 'keyword
    `([,@psl-ts-mode--keywords] @font-lock-keyword-face
-     ([,@psl-ts-mode--directives] @font-lock-keyword-face))
+     [,@psl-ts-mode--directives] @font-lock-keyword-face)
 
    :language 'psl
    :feature 'definition
@@ -159,7 +159,7 @@ Uses `psl-ts-mode-grammar-source' as the grammar location."
    `((temporal_unary_op) @font-lock-keyword-face
      (temporal_binary_op) @font-lock-keyword-face
      (next_event_property operator: _ @font-lock-keyword-face)
-     ([,@psl-ts-mode--temporal-operators] @font-lock-keyword-face))
+     [,@psl-ts-mode--temporal-operators] @font-lock-keyword-face)
 
    :language 'psl
    :feature 'number
