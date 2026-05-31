@@ -94,14 +94,16 @@ Uses `psl-ts-mode-grammar-source' as the grammar location."
     "property" "sequence" "endpoint"
     "default" "clock" "is" "report"
     "strong" "weak"
-    "const" "boolean" "hdltype"
+    "const" "mutable" "boolean" "hdltype"
+    "bit" "bitvector" "numeric" "string"
+    "inherit" "nontransitive" "override"
     "within" "to" "downto" "inf"
     "forall" "in" "union")
   "PSL keywords for tree-sitter font-locking.")
 
 (defvar psl-ts-mode--directives
   '("assert" "assume" "assume_guarantee" "cover"
-    "restrict" "restrict!" "fairness")
+    "restrict" "restrict!" "fairness" "strong_fairness")
   "PSL verification directives for tree-sitter font-locking.")
 
 (defvar psl-ts-mode--operators
@@ -138,6 +140,14 @@ Uses `psl-ts-mode-grammar-source' as the grammar location."
      (property_declaration name: (identifier) @font-lock-function-name-face)
      (sequence_declaration name: (identifier) @font-lock-function-name-face)
      (endpoint_declaration name: (identifier) @font-lock-function-name-face))
+
+   :language 'psl
+   :feature 'label
+   '((assert_directive label: (identifier) @font-lock-variable-name-face)
+     (assume_directive label: (identifier) @font-lock-variable-name-face)
+     (cover_directive label: (identifier) @font-lock-variable-name-face)
+     (restrict_directive label: (identifier) @font-lock-variable-name-face)
+     (fairness_directive label: (identifier) @font-lock-variable-name-face))
 
    :language 'psl
    :feature 'builtin
@@ -211,7 +221,7 @@ Uses `psl-ts-mode-grammar-source' as the grammar location."
     (setq-local treesit-font-lock-settings psl-ts-mode--font-lock-settings)
     (setq-local treesit-font-lock-feature-list
                 '((comment string)
-                  (keyword definition)
+                  (keyword definition label)
                   (builtin temporal number)
                   (operator bracket delimiter)))
 

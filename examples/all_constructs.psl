@@ -211,3 +211,37 @@ vunit all_constructs_props (dut) {
   strong fairness valid, ready;
 
 }
+
+-- ================================================================= vunit (IEEE 1850 additions)
+-- inherit/override, labelled directives, strong_fairness, the full set of
+-- formal-parameter type classes, and the ended / nondet_vector builtins.
+vunit spec_additions_props {
+
+  -- inherit another vunit (and the nontransitive form)
+  inherit liveness_prop;
+  nontransitive inherit constraint_mode;
+
+  -- override declared names
+  override ack, grant;
+
+  -- all formal-parameter type classes, plus the mutable modifier
+  property typed_tpl (mutable boolean b; bit x; bitvector v;
+                      numeric n; string s) is
+    always b;
+
+  -- labelled directives ( [ Label : ] Verification_Directive )
+  chk_req:  assert always (req -> eventually! grant) report "req->grant";
+  cov_seq:  cover {req; ack};
+  asm_safe: assume always (not (overflow and underflow));
+
+  -- ended() builtin (sequence-name argument)
+  endpoint done_ep is {req; ack};
+  property ended_prop is always (ended(done_ep) -> next idle);
+
+  -- nondet_vector(Number, Value_Set) builtin
+  property nondet_prop is always (sel = nondet_vector(2, drive));
+
+  -- strong_fairness as a distinct keyword (two Boolean operands)
+  strong_fairness req, grant;
+
+}

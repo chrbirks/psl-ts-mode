@@ -231,6 +231,16 @@
     "type": "assert_directive",
     "named": true,
     "fields": {
+      "label": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      },
       "property": {
         "multiple": true,
         "required": true,
@@ -393,6 +403,16 @@
     "type": "assume_directive",
     "named": true,
     "fields": {
+      "label": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      },
       "property": {
         "multiple": true,
         "required": true,
@@ -1466,6 +1486,16 @@
     "type": "cover_directive",
     "named": true,
     "fields": {
+      "label": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      },
       "sequence": {
         "multiple": true,
         "required": true,
@@ -1814,7 +1844,18 @@
   {
     "type": "fairness_directive",
     "named": true,
-    "fields": {},
+    "fields": {
+      "label": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      }
+    },
     "children": {
       "multiple": true,
       "required": true,
@@ -2017,6 +2058,33 @@
           }
         ]
       }
+    }
+  },
+  {
+    "type": "inherit_declaration",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "attribute_name",
+          "named": true
+        },
+        {
+          "type": "identifier",
+          "named": true
+        },
+        {
+          "type": "indexed_name",
+          "named": true
+        },
+        {
+          "type": "selected_name",
+          "named": true
+        }
+      ]
     }
   },
   {
@@ -2560,6 +2628,33 @@
       "types": [
         {
           "type": "temporal_count",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "override_declaration",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "attribute_name",
+          "named": true
+        },
+        {
+          "type": "identifier",
+          "named": true
+        },
+        {
+          "type": "indexed_name",
+          "named": true
+        },
+        {
+          "type": "selected_name",
           "named": true
         }
       ]
@@ -3288,6 +3383,16 @@
     "type": "restrict_directive",
     "named": true,
     "fields": {
+      "label": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      },
       "sequence": {
         "multiple": true,
         "required": true,
@@ -4921,6 +5026,14 @@
           "named": true
         },
         {
+          "type": "inherit_declaration",
+          "named": true
+        },
+        {
+          "type": "override_declaration",
+          "named": true
+        },
+        {
           "type": "restrict_directive",
           "named": true
         },
@@ -5132,8 +5245,16 @@
     "named": false
   },
   {
+    "type": "bit",
+    "named": false
+  },
+  {
     "type": "bit_string_literal",
     "named": true
+  },
+  {
+    "type": "bitvector",
+    "named": false
   },
   {
     "type": "boolean",
@@ -5169,6 +5290,10 @@
   },
   {
     "type": "downto",
+    "named": false
+  },
+  {
+    "type": "ended",
     "named": false
   },
   {
@@ -5212,6 +5337,10 @@
     "named": false
   },
   {
+    "type": "inherit",
+    "named": false
+  },
+  {
     "type": "integer",
     "named": true
   },
@@ -5225,6 +5354,10 @@
   },
   {
     "type": "mod",
+    "named": false
+  },
+  {
+    "type": "mutable",
     "named": false
   },
   {
@@ -5288,11 +5421,23 @@
     "named": false
   },
   {
+    "type": "nondet_vector",
+    "named": false
+  },
+  {
+    "type": "nontransitive",
+    "named": false
+  },
+  {
     "type": "nor",
     "named": false
   },
   {
     "type": "not",
+    "named": false
+  },
+  {
+    "type": "numeric",
     "named": false
   },
   {
@@ -5305,6 +5450,10 @@
   },
   {
     "type": "or",
+    "named": false
+  },
+  {
+    "type": "override",
     "named": false
   },
   {
@@ -5348,11 +5497,19 @@
     "named": false
   },
   {
+    "type": "string",
+    "named": false
+  },
+  {
     "type": "string_literal",
     "named": true
   },
   {
     "type": "strong",
+    "named": false
+  },
+  {
+    "type": "strong_fairness",
     "named": false
   },
   {

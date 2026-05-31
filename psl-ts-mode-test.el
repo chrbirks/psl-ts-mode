@@ -99,6 +99,29 @@
            (unit (treesit-search-subtree root "verification_unit")))
       (should (equal (psl-ts-mode--defun-name unit) "my_unit")))))
 
+(ert-deftest psl-ts-test-spec-additions-parse-clean ()
+  "New IEEE 1850 constructs should parse with no ERROR nodes."
+  (psl-ts-test--with-buffer
+      (concat "vunit u {\n"
+              "  nontransitive inherit base1, base2;\n"
+              "  override sig1, sig2;\n"
+              "  property p (mutable boolean b; bit x; bitvector v;\n"
+              "              numeric n; string s) is always b;\n"
+              "  chk_req: assert always (req -> ended(seq)) report \"x\";\n"
+              "  cov_lbl: cover {a; b};\n"
+              "  strong_fairness a, b;\n"
+              "  assert always nondet_vector(2, x);\n"
+              "}\n")
+    (let ((root (treesit-buffer-root-node)))
+      (should-not (treesit-node-check root 'has-error)))))
+
+(ert-deftest psl-ts-test-directive-label-font-lock ()
+  "A directive label should be fontified with the variable-name face."
+  (psl-ts-test--with-buffer "chk_req: assert always req;\n"
+    (font-lock-ensure)
+    (goto-char (point-min))
+    (should (eq (face-at-point) 'font-lock-variable-name-face))))
+
 (ert-deftest psl-ts-test-example-files-parse-clean ()
   "Every file in examples/ should parse with zero ERROR nodes."
   (let ((examples-dir (expand-file-name

@@ -89,6 +89,23 @@ module.exports = grammar({
       $.declaration,
       $.default_clock,
       $.verification_unit,
+      $.inherit_declaration,
+      $.override_declaration,
+    ),
+
+    // Inherit_Spec ::= [nontransitive] inherit vunit_Name {, vunit_Name} ;
+    inherit_declaration: $ => seq(
+      optional('nontransitive'),
+      'inherit',
+      sep1($._name, ','),
+      ';',
+    ),
+
+    // Override_Spec ::= override Name_List ;
+    override_declaration: $ => seq(
+      'override',
+      sep1($._name, ','),
+      ';',
     ),
 
     // ----------------------------------------------------------- default clock
@@ -110,7 +127,11 @@ module.exports = grammar({
       $.fairness_directive,
     ),
 
+    // PSL_Directive ::= [ Label : ] Verification_Directive
+    _directive_label: $ => seq(field('label', $.identifier), ':'),
+
     assert_directive: $ => seq(
+      optional($._directive_label),
       'assert',
       field('property', $._property),
       optional($.report_clause),
@@ -118,29 +139,53 @@ module.exports = grammar({
     ),
 
     assume_directive: $ => seq(
+      optional($._directive_label),
       choice('assume', 'assume_guarantee'),
       field('property', $._property),
       ';',
     ),
 
+    // The directive argument is a single sequence: a braced SERE, a clocked
+    // braced SERE, or a sequence name/boolean. A bare top-level `a ; b`
+    // concatenation is not used here, and allowing it would make the
+    // terminating `;` ambiguous with a following directive label.
+    _directive_sequence: $ => choice(
+      $._braced_sere,
+      $.clocked_sere,
+      $._boolean,
+    ),
+
     cover_directive: $ => seq(
+      optional($._directive_label),
       'cover',
-      field('sequence', $._sere),
+      field('sequence', $._directive_sequence),
       optional($.report_clause),
       ';',
     ),
 
     restrict_directive: $ => seq(
+      optional($._directive_label),
       choice('restrict', 'restrict!'),
-      field('sequence', $._sere),
+      field('sequence', $._directive_sequence),
       ';',
     ),
 
+    // Two distinct forms: the weak/strong-modified `fairness B` and the
+    // separate `strong_fairness B, B` keyword (IEEE 1850 §7).
     fairness_directive: $ => seq(
-      optional(choice('strong', 'weak')),
-      'fairness',
-      $._boolean,
-      optional(seq(',', $._boolean)),
+      optional($._directive_label),
+      choice(
+        seq(
+          optional(choice('strong', 'weak')),
+          'fairness',
+          $._boolean,
+          optional(seq(',', $._boolean)),
+        ),
+        seq(
+          'strong_fairness',
+          $._boolean, ',', $._boolean,
+        ),
+      ),
       ';',
     ),
 
@@ -186,8 +231,14 @@ module.exports = grammar({
       ')',
     ),
 
+    // NOTE: because `word: $ => $.identifier`, every type-class keyword below
+    // (bit, bitvector, numeric, string, ...) becomes globally reserved and can
+    // no longer be lexed as an identifier anywhere in a .psl file. These are
+    // VHDL type names rather than typical signal names, so the impact is small.
     formal_parameter: $ => seq(
-      choice('const', 'boolean', 'property', 'sequence', 'hdltype'),
+      optional(choice('const', 'mutable')),
+      optional(choice('boolean', 'bit', 'bitvector', 'numeric', 'string',
+                      'property', 'sequence', 'hdltype')),
       sep1($.identifier, ','),
     ),
 
@@ -399,9 +450,14 @@ module.exports = grammar({
       ')',
     ),
 
+    // NOTE: `ended` actually takes a Sequence argument, but `builtin_call`
+    // accepts only Boolean arguments, so `ended(seq_name)` parses while an
+    // inline braced-SERE argument like `ended({a;b})` does not. Acceptable
+    // under this pragmatic editor-grammar subset.
     builtin_function: _ => choice(
-      'prev', 'stable', 'rose', 'fell',
-      'countones', 'onehot', 'onehot0', 'isunknown', 'nondet',
+      'prev', 'stable', 'rose', 'fell', 'ended',
+      'countones', 'onehot', 'onehot0', 'isunknown',
+      'nondet', 'nondet_vector',
     ),
 
     _primary: $ => choice(

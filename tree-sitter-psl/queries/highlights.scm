@@ -16,11 +16,13 @@
 [
   "vunit" "vmode" "vprop" "vpkg"
   "assert" "assume" "assume_guarantee" "cover"
-  "restrict" "restrict!" "fairness"
+  "restrict" "restrict!" "fairness" "strong_fairness"
   "property" "sequence" "endpoint"
   "default" "clock" "is" "report"
   "strong" "weak"
-  "const" "boolean" "hdltype"
+  "const" "mutable" "boolean" "hdltype"
+  "bit" "bitvector" "numeric" "string"
+  "inherit" "nontransitive" "override"
   "within" "to" "downto" "inf"
   "forall" "in" "union"
 ] @keyword
@@ -51,6 +53,13 @@
 (property_declaration name: (identifier) @function)
 (sequence_declaration name: (identifier) @function)
 (endpoint_declaration name: (identifier) @function)
+
+; Directive labels
+(assert_directive label: (identifier) @label)
+(assume_directive label: (identifier) @label)
+(cover_directive label: (identifier) @label)
+(restrict_directive label: (identifier) @label)
+(fairness_directive label: (identifier) @label)
 
 ; Punctuation
 [ "(" ")" "{" "}" "[" "[*" "[+" "[=" "[->" "]" ] @punctuation.bracket
