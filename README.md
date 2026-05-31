@@ -64,7 +64,7 @@ For `.psl` files:
 ### 1. Put the mode on your `load-path`
 
 ```elisp
-(add-to-list 'load-path "/path/to/emacs-psl-mode")
+(add-to-list 'load-path "/path/to/psl-ts-mode")
 (require 'psl-ts-mode)
 ```
 
@@ -72,7 +72,7 @@ Or with `use-package`:
 
 ```elisp
 (use-package psl-ts-mode
-  :load-path "/path/to/emacs-psl-mode"
+  :ensure (:host github :repo "chrbirks/psl-ts-mode")
   :commands (psl-ts-mode-install-grammar)
   :mode "\\.psl\\'")
 ```
@@ -86,7 +86,7 @@ For a local checkout, point the grammar source at it and install:
 
 ```elisp
 (setq psl-ts-mode-grammar-source
-      (list "/path/to/emacs-psl-mode/tree-sitter-psl" nil "src"))
+      (list "/path/to/psl-ts-mode/tree-sitter-psl" nil "src"))
 (psl-ts-mode-install-grammar)
 ```
 
