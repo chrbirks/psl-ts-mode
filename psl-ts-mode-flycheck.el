@@ -32,7 +32,12 @@
 
 (require 'flycheck)
 (require 'treesit)
-(require 'psl-ts-mode)
+
+;; psl-ts-mode is guaranteed loaded at runtime (checker only runs in psl-ts-mode
+;; buffers), but declare its symbols so the byte-compiler doesn't warn.
+(declare-function psl-ts-mode--find-ancestor "psl-ts-mode" (node type))
+(declare-function psl-ts-mode--directive-clocked-p "psl-ts-mode" (directive))
+(defvar psl-ts-mode--clocked-directive-types)
 
 ;;;; Project config
 
