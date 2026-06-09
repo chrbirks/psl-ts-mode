@@ -1960,39 +1960,31 @@
       "members": [
         {
           "type": "SYMBOL",
-          "name": "_number"
+          "name": "_boolean"
         },
         {
           "type": "SEQ",
           "members": [
             {
               "type": "SYMBOL",
-              "name": "_number"
+              "name": "_boolean"
             },
             {
               "type": "STRING",
               "value": "to"
             },
             {
-              "type": "SYMBOL",
-              "name": "_number"
-            }
-          ]
-        },
-        {
-          "type": "SEQ",
-          "members": [
-            {
-              "type": "SYMBOL",
-              "name": "_number"
-            },
-            {
-              "type": "STRING",
-              "value": "to"
-            },
-            {
-              "type": "STRING",
-              "value": "inf"
+              "type": "CHOICE",
+              "members": [
+                {
+                  "type": "SYMBOL",
+                  "name": "_boolean"
+                },
+                {
+                  "type": "STRING",
+                  "value": "inf"
+                }
+              ]
             }
           ]
         }

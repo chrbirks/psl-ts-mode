@@ -16,7 +16,7 @@
     "license": "GPL-3.0",
     "description": "PSL (Property Specification Language, IEEE 1850) grammar for tree-sitter",
     "links": {
-      "repository": "https://github.com/tree-sitter/tree-sitter-psl"
+      "repository": "https://github.com/chrbirks/psl-ts-mode"
     }
   },
   "bindings": {

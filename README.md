@@ -148,6 +148,19 @@ emacs -batch -L . -l ert -l psl-ts-mode.el -l psl-ts-mode-test.el \
   -f ert-run-tests-batch-and-exit
 ```
 
+Tests that need the grammar are skipped when it is not installed.  To run
+against a locally built grammar without installing it, build a shared library
+next to the generated parser and point `treesit-extra-load-path` at it:
+
+```sh
+cc -shared -fPIC -O2 -I tree-sitter-psl/src \
+  tree-sitter-psl/src/parser.c -o tree-sitter-psl/src/libtree-sitter-psl.so
+emacs -batch -L . \
+  --eval "(setq treesit-extra-load-path '(\"$PWD/tree-sitter-psl/src\"))" \
+  -l ert -l psl-ts-mode.el -l psl-ts-mode-test.el \
+  -f ert-run-tests-batch-and-exit
+```
+
 ## Diagnostics
 
 `psl-ts-mode-flycheck.el` provides optional [Flycheck](https://www.flycheck.org/)

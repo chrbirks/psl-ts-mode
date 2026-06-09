@@ -161,3 +161,45 @@ assert always (data(7 downto 0) = x"FF");
               (integer)
               (integer)))
           (bit_string_literal))))))
+
+================================================================================
+Const parameter as count
+================================================================================
+
+property p (const n) is always (req -> next[n] ack);
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (declaration
+    (property_declaration
+      name: (identifier)
+      (formal_parameter_list
+        (formal_parameter
+          (identifier)))
+      definition: (unary_temporal
+        operator: (temporal_unary_op)
+        operand: (paren_property
+          (logical_implication
+            left: (identifier)
+            right: (unary_temporal
+              operator: (temporal_unary_op)
+              (temporal_count
+                (identifier))
+              operand: (identifier))))))))
+
+================================================================================
+Identifier in repetition range
+================================================================================
+
+assert {valid[*2 to depth]};
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (assert_directive
+    property: (sere_repetition
+      (identifier)
+      (repeat_count
+        (integer)
+        (identifier)))))

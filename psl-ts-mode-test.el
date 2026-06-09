@@ -35,12 +35,14 @@
 
 (ert-deftest psl-ts-test-mode-activates ()
   "Opening PSL content should select `psl-ts-mode' and create a parser."
+  (skip-unless (treesit-ready-p 'psl))
   (psl-ts-test--with-buffer "assert always a;\n"
     (should (eq major-mode 'psl-ts-mode))
     (should (treesit-parser-list))))
 
 (ert-deftest psl-ts-test-parses-without-error ()
   "A representative buffer should parse with no ERROR nodes."
+  (skip-unless (treesit-ready-p 'psl))
   (psl-ts-test--with-buffer
       (concat "vunit u (top) {\n"
               "  default clock is rising_edge(clk);\n"
@@ -58,6 +60,7 @@
 
 (ert-deftest psl-ts-test-font-lock-keyword ()
   "Directive and temporal keywords should be fontified."
+  (skip-unless (treesit-ready-p 'psl))
   (psl-ts-test--with-buffer "assert always req;\n"
     (font-lock-ensure)
     ;; "assert" keyword.
@@ -70,6 +73,7 @@
 
 (ert-deftest psl-ts-test-font-lock-comment-and-string ()
   "Comments and strings should be fontified."
+  (skip-unless (treesit-ready-p 'psl))
   (psl-ts-test--with-buffer "-- a comment\nassert a report \"hi\";\n"
     (font-lock-ensure)
     (goto-char (point-min))
@@ -81,6 +85,7 @@
 
 (ert-deftest psl-ts-test-indentation ()
   "Verification-unit bodies should indent by `psl-ts-mode-indent-offset'."
+  (skip-unless (treesit-ready-p 'psl))
   (psl-ts-test--with-buffer
       "vunit u (top) {\nassert a;\n}\n"
     (let ((psl-ts-mode-indent-offset 2))
@@ -94,6 +99,7 @@
 
 (ert-deftest psl-ts-test-imenu-defun-name ()
   "The defun-name function should return verification-unit names."
+  (skip-unless (treesit-ready-p 'psl))
   (psl-ts-test--with-buffer "vunit my_unit (top) {\n  assert a;\n}\n"
     (let* ((root (treesit-buffer-root-node))
            (unit (treesit-search-subtree root "verification_unit")))
@@ -101,6 +107,7 @@
 
 (ert-deftest psl-ts-test-spec-additions-parse-clean ()
   "New IEEE 1850 constructs should parse with no ERROR nodes."
+  (skip-unless (treesit-ready-p 'psl))
   (psl-ts-test--with-buffer
       (concat "vunit u {\n"
               "  nontransitive inherit base1, base2;\n"
@@ -117,6 +124,7 @@
 
 (ert-deftest psl-ts-test-directive-label-font-lock ()
   "A directive label should be fontified with the variable-name face."
+  (skip-unless (treesit-ready-p 'psl))
   (psl-ts-test--with-buffer "chk_req: assert always req;\n"
     (font-lock-ensure)
     (goto-char (point-min))
@@ -124,6 +132,7 @@
 
 (ert-deftest psl-ts-test-example-files-parse-clean ()
   "Every file in examples/ should parse with zero ERROR nodes."
+  (skip-unless (treesit-ready-p 'psl))
   (let ((examples-dir (expand-file-name
                        "examples"
                        (file-name-directory
@@ -140,6 +149,7 @@
 
 (ert-deftest psl-ts-test-directive-clocked-with-default-clock ()
   "A directive inside a vunit that has `default clock' is considered clocked."
+  (skip-unless (treesit-ready-p 'psl))
   (psl-ts-test--with-buffer
       "vunit u (top) {\n  default clock is rising_edge(clk);\n  assert always req;\n}\n"
     (let* ((root (treesit-buffer-root-node))
@@ -151,6 +161,7 @@
 
 (ert-deftest psl-ts-test-directive-unclocked-without-default-clock ()
   "A directive inside a vunit without `default clock' is not clocked."
+  (skip-unless (treesit-ready-p 'psl))
   (psl-ts-test--with-buffer
       "vunit u (top) {\n  assert always req;\n}\n"
     (let* ((root (treesit-buffer-root-node))
@@ -162,6 +173,7 @@
 
 (ert-deftest psl-ts-test-directive-clocked-inline ()
   "A directive whose property is directly a clocked_property is considered clocked."
+  (skip-unless (treesit-ready-p 'psl))
   (psl-ts-test--with-buffer
       "vunit u (top) {\n  assert (req -> next ack) @ rising_edge(clk);\n}\n"
     (let* ((root (treesit-buffer-root-node))
@@ -173,6 +185,7 @@
 
 (ert-deftest psl-ts-test-syntax-error-produces-error-node ()
   "A buffer with a syntax error should have an ERROR node in the tree."
+  (skip-unless (treesit-ready-p 'psl))
   (psl-ts-test--with-buffer
       "vunit u (top) {\n  assert $$$INVALID;\n}\n"
     (let ((root (treesit-buffer-root-node)))

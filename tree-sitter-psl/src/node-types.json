@@ -3122,7 +3122,39 @@
       "required": false,
       "types": [
         {
+          "type": "attribute_name",
+          "named": true
+        },
+        {
           "type": "based_literal",
+          "named": true
+        },
+        {
+          "type": "binary_expression",
+          "named": true
+        },
+        {
+          "type": "bit_string_literal",
+          "named": true
+        },
+        {
+          "type": "boolean_literal",
+          "named": true
+        },
+        {
+          "type": "builtin_call",
+          "named": true
+        },
+        {
+          "type": "character_literal",
+          "named": true
+        },
+        {
+          "type": "identifier",
+          "named": true
+        },
+        {
+          "type": "indexed_name",
           "named": true
         },
         {
@@ -3130,7 +3162,23 @@
           "named": true
         },
         {
+          "type": "paren_expression",
+          "named": true
+        },
+        {
           "type": "real",
+          "named": true
+        },
+        {
+          "type": "selected_name",
+          "named": true
+        },
+        {
+          "type": "string_literal",
+          "named": true
+        },
+        {
+          "type": "unary_expression",
           "named": true
         }
       ]
@@ -4679,7 +4727,39 @@
       "required": false,
       "types": [
         {
+          "type": "attribute_name",
+          "named": true
+        },
+        {
           "type": "based_literal",
+          "named": true
+        },
+        {
+          "type": "binary_expression",
+          "named": true
+        },
+        {
+          "type": "bit_string_literal",
+          "named": true
+        },
+        {
+          "type": "boolean_literal",
+          "named": true
+        },
+        {
+          "type": "builtin_call",
+          "named": true
+        },
+        {
+          "type": "character_literal",
+          "named": true
+        },
+        {
+          "type": "identifier",
+          "named": true
+        },
+        {
+          "type": "indexed_name",
           "named": true
         },
         {
@@ -4687,7 +4767,23 @@
           "named": true
         },
         {
+          "type": "paren_expression",
+          "named": true
+        },
+        {
           "type": "real",
+          "named": true
+        },
+        {
+          "type": "selected_name",
+          "named": true
+        },
+        {
+          "type": "string_literal",
+          "named": true
+        },
+        {
+          "type": "unary_expression",
           "named": true
         }
       ]

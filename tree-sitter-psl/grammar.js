@@ -404,10 +404,11 @@ module.exports = grammar({
       seq('[->', optional($._count), ']'),
     ),
 
+    // A count is any statically-evaluable expression, e.g. a literal or a
+    // `const` formal parameter: next[n], valid[*2 to depth].
     _count: $ => choice(
-      $._number,
-      seq($._number, 'to', $._number),
-      seq($._number, 'to', 'inf'),
+      $._boolean,
+      seq($._boolean, 'to', choice($._boolean, 'inf')),
     ),
 
     // ----------------------------------------- Boolean layer (VHDL expressions)

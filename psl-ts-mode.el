@@ -175,7 +175,7 @@ Uses `psl-ts-mode-grammar-source' as the grammar location."
 
    :language 'psl
    :feature 'bracket
-   '((["(" ")" "{" "}" "[*" "[+" "[=" "[->" "]"]) @font-lock-bracket-face)
+   '((["(" ")" "{" "}" "[" "[*" "[+" "[=" "[->" "]"]) @font-lock-bracket-face)
 
    :language 'psl
    :feature 'delimiter
@@ -239,13 +239,16 @@ a `clocked_property' or `clocked_sere' node."
 
 \\{psl-ts-mode-map}"
   :group 'psl-ts
-  (when (treesit-ready-p 'psl)
-    (treesit-parser-create 'psl)
 
-    ;; Comments.
-    (setq-local comment-start "-- ")
-    (setq-local comment-end "")
-    (setq-local comment-start-skip (rx (or "--" "/*") (* (syntax whitespace))))
+  ;; Comments (useful even without the grammar).
+  (setq-local comment-start "-- ")
+  (setq-local comment-end "")
+  (setq-local comment-start-skip (rx (or "--" "/*") (* (syntax whitespace))))
+
+  (if (not (treesit-ready-p 'psl t))
+      (message "Tree-sitter grammar for PSL is not installed; run \
+`M-x psl-ts-mode-install-grammar'")
+    (treesit-parser-create 'psl)
 
     ;; Font lock.
     (setq-local treesit-font-lock-settings psl-ts-mode--font-lock-settings)
