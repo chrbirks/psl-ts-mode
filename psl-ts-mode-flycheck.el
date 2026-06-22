@@ -37,6 +37,7 @@
 ;; buffers), but declare its symbols so the byte-compiler doesn't warn.
 (declare-function psl-ts-mode--find-ancestor "psl-ts-mode" (node type))
 (declare-function psl-ts-mode--directive-clocked-p "psl-ts-mode" (directive))
+(declare-function psl-ts-mode--collect-subtree "psl-ts-mode" (node predicate))
 (defvar psl-ts-mode--clocked-directive-types)
 
 ;;;; Project config
@@ -81,13 +82,11 @@ PSL directives (warning level)."
   (let* ((root (treesit-buffer-root-node))
          errors)
     ;; Syntax errors: ERROR nodes and missing nodes
-    (dolist (node (or (treesit-search-subtree
-                       root
-                       (lambda (n)
-                         (or (string= (treesit-node-type n) "ERROR")
-                             (treesit-node-check n 'missing)))
-                       nil t)
-                      nil))
+    (dolist (node (psl-ts-mode--collect-subtree
+                   root
+                   (lambda (n)
+                     (or (string= (treesit-node-type n) "ERROR")
+                         (treesit-node-check n 'missing)))))
       (let ((lc (psl-ts-mode--pos-to-line-col (treesit-node-start node))))
         (push (flycheck-error-new-at
                (car lc) (cdr lc) 'error
@@ -97,13 +96,11 @@ PSL directives (warning level)."
                :checker checker)
               errors)))
     ;; Unclocked directives
-    (dolist (node (or (treesit-search-subtree
-                       root
-                       (lambda (n)
-                         (member (treesit-node-type n)
-                                 psl-ts-mode--clocked-directive-types))
-                       nil t)
-                      nil))
+    (dolist (node (psl-ts-mode--collect-subtree
+                   root
+                   (lambda (n)
+                     (member (treesit-node-type n)
+                             psl-ts-mode--clocked-directive-types))))
       (unless (psl-ts-mode--directive-clocked-p node)
         (let ((lc (psl-ts-mode--pos-to-line-col (treesit-node-start node))))
           (push (flycheck-error-new-at
@@ -113,7 +110,7 @@ PSL directives (warning level)."
                          "or append `@ clock' to this directive.")
                  :checker checker)
                 errors))))
-    errors))
+    (nreverse errors)))
 
 ;;;; Checker A: psl-treesit
 

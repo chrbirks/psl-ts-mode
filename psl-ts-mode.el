@@ -218,6 +218,20 @@ Uses `psl-ts-mode-grammar-source' as the grammar location."
       (setq parent (treesit-node-parent parent)))
     parent))
 
+(defun psl-ts-mode--collect-subtree (node predicate)
+  "Return all nodes in NODE's subtree (including NODE) matching PREDICATE.
+PREDICATE is a function taking a node and returning non-nil for a match.
+Unlike `treesit-search-subtree', which stops at the first match, this
+collects every matching node, in depth-first pre-order."
+  (let ((stack (list node))
+        matches)
+    (while stack
+      (let ((n (pop stack)))
+        (when (funcall predicate n)
+          (push n matches))
+        (setq stack (append (treesit-node-children n) stack))))
+    (nreverse matches)))
+
 (defun psl-ts-mode--directive-clocked-p (directive)
   "Return non-nil if DIRECTIVE is covered by a clock.
 A directive is clocked if its enclosing verification_unit has a
