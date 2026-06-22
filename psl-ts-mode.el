@@ -79,6 +79,11 @@ to the path of the local checkout of this repository."
   :type '(list (string :tag "URL or local path")
                (choice (const :tag "Default revision" nil) string)
                (choice (const :tag "Default source dir" nil) string))
+  :safe (lambda (v)
+          (and (listp v) (= (length v) 3)
+               (stringp (nth 0 v))
+               (or (null (nth 1 v)) (stringp (nth 1 v)))
+               (or (null (nth 2 v)) (stringp (nth 2 v)))))
   :group 'psl-ts)
 
 ;;;###autoload
