@@ -17,8 +17,11 @@
 ;; Two checkers are registered for `psl-ts-mode', chained in order:
 ;;
 ;;   `psl-treesit' — always-on AST lint using the live tree-sitter tree.
-;;     Detects syntax errors (ERROR/missing nodes) and reports unclocked
-;;     directives that GHDL cannot check without a clock context.
+;;     Detects syntax errors (ERROR/missing nodes), reports unclocked
+;;     directives that GHDL cannot check without a clock context, and warns
+;;     on directives that reference an undeclared property/sequence/endpoint
+;;     name (skipped for units that use `inherit', since this checker has no
+;;     visibility into names from outside the current file).
 ;;
 ;;   `psl-ghdl' — optional semantic check via GHDL.
 ;;     Runs only when `psl-ts-mode-ghdl-design-files' is configured.
@@ -38,6 +41,10 @@
 (declare-function psl-ts-mode--find-ancestor "psl-ts-mode" (node type))
 (declare-function psl-ts-mode--directive-clocked-p "psl-ts-mode" (directive))
 (declare-function psl-ts-mode--collect-subtree "psl-ts-mode" (node predicate))
+(declare-function psl-ts-mode--directive-target "psl-ts-mode" (directive))
+(declare-function psl-ts-mode--directive-scope "psl-ts-mode" (node))
+(declare-function psl-ts-mode--scope-has-inherit-p "psl-ts-mode" (scope))
+(declare-function psl-ts-mode--scope-declared-names "psl-ts-mode" (scope))
 (defvar psl-ts-mode--clocked-directive-types)
 
 ;;;; Project config
@@ -77,8 +84,9 @@ per project via .dir-locals.el:
 (defun psl-ts-mode--ast-lint (checker)
   "Return a list of `flycheck-error' objects for the current buffer.
 CHECKER is the Flycheck checker symbol attached to each error.
-Checks: tree-sitter ERROR/missing nodes (error level) and unclocked
-PSL directives (warning level)."
+Checks: tree-sitter ERROR/missing nodes (error level), unclocked PSL
+directives (warning level), and directives that reference an undeclared
+property/sequence/endpoint name by a bare identifier (warning level)."
   (let* ((root (treesit-buffer-root-node))
          errors)
     ;; Syntax errors: ERROR nodes and missing nodes
@@ -110,6 +118,29 @@ PSL directives (warning level)."
                          "or append `@ clock' to this directive.")
                  :checker checker)
                 errors))))
+    ;; Undeclared property/sequence/endpoint references.  Only checked when
+    ;; the directive's target is a bare identifier (a name reference, not a
+    ;; larger expression), and skipped entirely for any verification_unit
+    ;; that uses `inherit', since inherited names can't be resolved from a
+    ;; single standalone .psl file.
+    (dolist (node (psl-ts-mode--collect-subtree
+                   root
+                   (lambda (n)
+                     (member (treesit-node-type n)
+                             psl-ts-mode--clocked-directive-types))))
+      (let ((target (psl-ts-mode--directive-target node)))
+        (when (and target (string= (treesit-node-type target) "identifier"))
+          (let ((scope (psl-ts-mode--directive-scope node)))
+            (unless (psl-ts-mode--scope-has-inherit-p scope)
+              (let ((name (treesit-node-text target t)))
+                (unless (gethash name (psl-ts-mode--scope-declared-names scope))
+                  (let ((lc (psl-ts-mode--pos-to-line-col (treesit-node-start target))))
+                    (push (flycheck-error-new-at
+                           (car lc) (cdr lc) 'warning
+                           (format "`%s' is not declared in this verification unit (typo, or missing declaration)"
+                                   name)
+                           :checker checker)
+                          errors)))))))))
     (nreverse errors)))
 
 ;;;; Checker A: psl-treesit
@@ -123,8 +154,10 @@ CHECKER and CALLBACK follow the Flycheck generic-checker protocol."
 
 (flycheck-define-generic-checker 'psl-treesit
   "Check PSL using the tree-sitter AST.
-Reports syntax errors from ERROR/missing nodes and GHDL-compatibility
-warnings for unclocked directives.  No external tool required."
+Reports syntax errors from ERROR/missing nodes, GHDL-compatibility
+warnings for unclocked directives, and warnings for directives that
+reference an undeclared property/sequence/endpoint name.  No external
+tool required."
   :start #'psl-ts-mode--flycheck-treesit-start
   :modes '(psl-ts-mode)
   :next-checkers '((warning . psl-ghdl)))

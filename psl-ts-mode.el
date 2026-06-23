@@ -250,6 +250,47 @@ a `clocked_property' or `clocked_sere' node."
    (when-let ((prop (treesit-node-child-by-field-name directive "property")))
      (member (treesit-node-type prop) '("clocked_property" "clocked_sere")))))
 
+(defconst psl-ts-mode--declaration-types
+  '("property_declaration" "sequence_declaration" "endpoint_declaration")
+  "PSL declaration node types that introduce a name usable by directives.")
+
+(defun psl-ts-mode--directive-target (directive)
+  "Return DIRECTIVE's property/sequence field node, or nil.
+`assert_directive'/`assume_directive' use the `property' field;
+`cover_directive'/`restrict_directive' use the `sequence' field."
+  (or (treesit-node-child-by-field-name directive "property")
+      (treesit-node-child-by-field-name directive "sequence")))
+
+(defun psl-ts-mode--directive-scope (node)
+  "Return the nearest enclosing verification_unit of NODE.
+If NODE is not inside any verification_unit (a top-level directive),
+return the buffer root node instead."
+  (or (psl-ts-mode--find-ancestor node "verification_unit")
+      (treesit-buffer-root-node)))
+
+(defun psl-ts-mode--scope-has-inherit-p (scope)
+  "Return non-nil if SCOPE directly contains an `inherit_declaration'.
+SCOPE is a verification_unit (or the buffer root, which never has one)."
+  (seq-some (lambda (n) (string= (treesit-node-type n) "inherit_declaration"))
+            (treesit-node-children scope)))
+
+(defun psl-ts-mode--scope-declared-names (scope)
+  "Return a hash set of names declared directly within SCOPE.
+Does not descend into nested `verification_unit' nodes, so a directive's
+scope only sees its own unit's declarations, not an inner or outer one's."
+  (let ((stack (treesit-node-children scope))
+        (names (make-hash-table :test #'equal)))
+    (while stack
+      (let ((n (pop stack)))
+        (cond
+         ((member (treesit-node-type n) psl-ts-mode--declaration-types)
+          (puthash (treesit-node-text
+                    (treesit-node-child-by-field-name n "name") t)
+                   t names))
+         ((string= (treesit-node-type n) "verification_unit"))
+         (t (setq stack (append (treesit-node-children n) stack))))))
+    names))
+
 ;;;; Mode
 
 ;;;###autoload

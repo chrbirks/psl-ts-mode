@@ -191,5 +191,63 @@
     (let ((root (treesit-buffer-root-node)))
       (should (treesit-node-check root 'has-error)))))
 
+(ert-deftest psl-ts-test-undeclared-reference-flagged ()
+  "A bare directive reference to an undeclared name is not in scope's names."
+  (skip-unless (treesit-ready-p 'psl))
+  (psl-ts-test--with-buffer
+      "vunit u (top) {\n  property p1 is always true;\n  assert p2;\n}\n"
+    (let* ((root (treesit-buffer-root-node))
+           (dir (treesit-search-subtree
+                 root
+                 (lambda (n) (string= (treesit-node-type n) "assert_directive"))))
+           (target (psl-ts-mode--directive-target dir))
+           (scope (psl-ts-mode--directive-scope dir))
+           (names (psl-ts-mode--scope-declared-names scope)))
+      (should (string= (treesit-node-text target t) "p2"))
+      (should-not (psl-ts-mode--scope-has-inherit-p scope))
+      (should-not (gethash "p2" names))
+      (should (gethash "p1" names)))))
+
+(ert-deftest psl-ts-test-declared-reference-not-flagged ()
+  "A bare directive reference to a declared name is in scope's names."
+  (skip-unless (treesit-ready-p 'psl))
+  (psl-ts-test--with-buffer
+      "vunit u (top) {\n  property p1 is always true;\n  assert p1;\n}\n"
+    (let* ((root (treesit-buffer-root-node))
+           (dir (treesit-search-subtree
+                 root
+                 (lambda (n) (string= (treesit-node-type n) "assert_directive"))))
+           (target (psl-ts-mode--directive-target dir))
+           (scope (psl-ts-mode--directive-scope dir)))
+      (should (gethash (treesit-node-text target t)
+                        (psl-ts-mode--scope-declared-names scope))))))
+
+(ert-deftest psl-ts-test-inherit-skips-undeclared-check ()
+  "A verification_unit using `inherit' is detected so the check can bail out."
+  (skip-unless (treesit-ready-p 'psl))
+  (psl-ts-test--with-buffer
+      "vunit u (top) {\n  inherit other_unit;\n  assert p2;\n}\n"
+    (let* ((root (treesit-buffer-root-node))
+           (dir (treesit-search-subtree
+                 root
+                 (lambda (n) (string= (treesit-node-type n) "assert_directive"))))
+           (scope (psl-ts-mode--directive-scope dir)))
+      (should (psl-ts-mode--scope-has-inherit-p scope)))))
+
+(ert-deftest psl-ts-test-top-level-directive-scope ()
+  "A directive outside any verification_unit scopes to the buffer root."
+  (skip-unless (treesit-ready-p 'psl))
+  (psl-ts-test--with-buffer
+      "property p1 is always true;\nassert p2;\n"
+    (let* ((root (treesit-buffer-root-node))
+           (dir (treesit-search-subtree
+                 root
+                 (lambda (n) (string= (treesit-node-type n) "assert_directive"))))
+           (scope (psl-ts-mode--directive-scope dir)))
+      (should (treesit-node-eq scope root))
+      (should-not (psl-ts-mode--scope-has-inherit-p scope))
+      (should (gethash "p1" (psl-ts-mode--scope-declared-names scope)))
+      (should-not (gethash "p2" (psl-ts-mode--scope-declared-names scope))))))
+
 (provide 'psl-ts-mode-test)
 ;;; psl-ts-mode-test.el ends here
