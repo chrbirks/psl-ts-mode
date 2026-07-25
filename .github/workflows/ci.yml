@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+
+jobs:
+  grammar:
+    name: tree-sitter grammar
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install tree-sitter CLI
+        run: npm install -g tree-sitter-cli@^0.24.0
+      - name: Regenerate the parser
+        working-directory: tree-sitter-psl
+        run: tree-sitter generate
+      - name: Fail if the committed src/ is stale
+        run: |
+          if ! git diff --exit-code -- tree-sitter-psl/src; then
+            echo "::error::tree-sitter-psl/src is out of date; run 'tree-sitter generate' and commit the result."
+            exit 1
+          fi
+      - name: Corpus tests
+        working-directory: tree-sitter-psl
+        run: tree-sitter test
+
+  emacs:
+    name: Emacs ${{ matrix.emacs_version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        emacs_version: ['29.4', '30.1']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: purcell/setup-emacs@master
+        with:
+          version: ${{ matrix.emacs_version }}
+      - name: Build the grammar as a shared library
+        run: |
+          cc -shared -fPIC -O2 -I tree-sitter-psl/src \
+            tree-sitter-psl/src/parser.c \
+            -o tree-sitter-psl/src/libtree-sitter-psl.so
+      - name: Install Flycheck
+        run: |
+          emacs -Q --batch --eval "(progn
+            (require 'package)
+            (setq package-user-dir (expand-file-name \"elpa\" default-directory))
+            (add-to-list 'package-archives '(\"melpa\" . \"https://melpa.org/packages/\") t)
+            (package-initialize)
+            (package-refresh-contents)
+            (package-install 'flycheck))"
+      - name: Byte-compile
+        run: |
+          emacs -Q --batch -L . \
+            --eval "(progn
+              (setq package-user-dir (expand-file-name \"elpa\" default-directory))
+              (require 'package) (package-initialize)
+              (setq byte-compile-error-on-warn t))" \
+            -f batch-byte-compile psl-ts-mode.el psl-ts-mode-flycheck.el
+      - name: Checkdoc
+        run: |
+          emacs -Q --batch --eval "(progn
+            (require 'checkdoc)
+            (setq checkdoc-diagnostic-buffer \"*cd*\")
+            (dolist (f '(\"psl-ts-mode.el\" \"psl-ts-mode-flycheck.el\"))
+              (checkdoc-file f))
+            (when (get-buffer \"*cd*\")
+              (princ (with-current-buffer \"*cd*\" (buffer-string)))
+              (kill-emacs 1)))"
+      - name: ERT
+        run: |
+          emacs -Q --batch -L . \
+            --eval "(progn
+              (setq package-user-dir (expand-file-name \"elpa\" default-directory))
+              (require 'package) (package-initialize)
+              (setq treesit-extra-load-path
+                    (list (expand-file-name \"tree-sitter-psl/src/\"))))" \
+            -l ert -l psl-ts-mode.el -l psl-ts-mode-test.el \
+            -f ert-run-tests-batch-and-exit

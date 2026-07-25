@@ -49,6 +49,7 @@
 ;;; Code:
 
 (require 'treesit)
+(require 'seq)
 
 (eval-when-compile
   (require 'rx))
@@ -75,15 +76,14 @@
   "Source specification for the PSL tree-sitter grammar.
 A list of (URL REVISION SOURCE-DIR) suitable for
 `treesit-language-source-alist'.  When developing locally, set the URL
-to the path of the local checkout of this repository."
+to the path of the local checkout of this repository.
+
+Deliberately not marked `:safe': `psl-ts-mode-install-grammar' clones
+this location and compiles C from it, so a directory-local value must
+be confirmed by the user rather than applied silently."
   :type '(list (string :tag "URL or local path")
                (choice (const :tag "Default revision" nil) string)
                (choice (const :tag "Default source dir" nil) string))
-  :safe (lambda (v)
-          (and (listp v) (= (length v) 3)
-               (stringp (nth 0 v))
-               (or (null (nth 1 v)) (stringp (nth 1 v)))
-               (or (null (nth 2 v)) (stringp (nth 2 v)))))
   :group 'psl-ts)
 
 ;;;###autoload
@@ -102,6 +102,7 @@ Uses `psl-ts-mode-grammar-source' as the grammar location."
   '("vunit" "vmode" "vprop" "vpkg"
     "property" "sequence" "endpoint"
     "default" "clock" "is" "report"
+    "severity" "note" "warning" "error" "failure"
     "strong" "weak"
     "const" "mutable" "boolean" "hdltype"
     "bit" "bitvector" "numeric" "string"
@@ -189,17 +190,60 @@ Uses `psl-ts-mode-grammar-source' as the grammar location."
 
 ;;;; Indentation
 
+(defconst psl-ts-mode--indent-anchor-types
+  '(;; Blocks: everything between the delimiters is indented one step.
+    "verification_unit" "braced_sere"
+    ;; Statements: continuation lines are indented one step past their head.
+    "assert_directive" "assume_directive" "cover_directive" "restrict_directive"
+    "fairness_directive" "default_clock" "inherit_declaration"
+    "override_declaration" "property_declaration" "sequence_declaration"
+    "endpoint_declaration")
+  "Node types a line may be indented relative to.
+Both block openers (whose contents are indented) and statements (whose
+continuation lines are indented) behave the same way: one step past the
+indentation of the line the node starts on.")
+
+(defun psl-ts-mode--indent-anchor-node (node parent bol)
+  "Return the ancestor the line at BOL takes its indentation from.
+NODE is the node starting at BOL, if any.
+PARENT is NODE's parent as supplied by `treesit-simple-indent'.  Returns
+the innermost ancestor in `psl-ts-mode--indent-anchor-types' that starts
+on an earlier line than BOL, or nil if there is none.  Skipping ancestors
+that start on the current line is what keeps a statement's own head line
+from being indented relative to itself."
+  (let ((n (or parent (and node (treesit-node-parent node))))
+        (line-start (save-excursion (goto-char bol) (line-beginning-position))))
+    (catch 'found
+      (while n
+        (when (and (member (treesit-node-type n) psl-ts-mode--indent-anchor-types)
+                   (< (treesit-node-start n) line-start))
+          (throw 'found n))
+        (setq n (treesit-node-parent n)))
+      nil)))
+
+(defun psl-ts-mode--indent-anchor (node parent bol &rest _)
+  "Anchor for `psl-ts-mode' indentation of NODE with PARENT at BOL.
+Returns the first non-whitespace position of the line holding the node
+found by `psl-ts-mode--indent-anchor-node'."
+  (save-excursion
+    (goto-char (treesit-node-start
+                (psl-ts-mode--indent-anchor-node node parent bol)))
+    (back-to-indentation)
+    (point)))
+
 (defun psl-ts-mode--indent-rules ()
   "Return the tree-sitter indentation rules for `psl-ts-mode'."
   (let ((offset psl-ts-mode-indent-offset))
     `((psl
+       ;; Leave the interior lines of a multi-line /* .. */ comment alone.
+       ((parent-is "comment") no-indent)
        ((node-is "}") parent-bol 0)
        ((node-is ")") parent-bol 0)
-       ((parent-is "verification_unit") parent-bol ,offset)
-       ((parent-is "inherit_clause") parent-bol ,offset)
-       ((parent-is "actual_parameter_list") parent-bol ,offset)
-       ((parent-is "formal_parameter_list") parent-bol ,offset)
+       ;; Parameter and binding lists hang off their opening paren.
+       ((parent-is "formal_parameter_list") first-sibling 1)
+       ((parent-is "hdl_unit_binding") first-sibling 1)
        ((parent-is "source_file") column-0 0)
+       (psl-ts-mode--indent-anchor-node psl-ts-mode--indent-anchor ,offset)
        (catch-all parent-bol 0)))))
 
 ;;;; Imenu / navigation
@@ -237,19 +281,6 @@ collects every matching node, in depth-first pre-order."
         (setq stack (append (treesit-node-children n) stack))))
     (nreverse matches)))
 
-(defun psl-ts-mode--directive-clocked-p (directive)
-  "Return non-nil if DIRECTIVE is covered by a clock.
-A directive is clocked if its enclosing verification_unit has a
-`default_clock' declaration, or if its property operand is directly
-a `clocked_property' or `clocked_sere' node."
-  (or
-   (when-let ((vunit (psl-ts-mode--find-ancestor directive "verification_unit")))
-     (treesit-search-subtree
-      vunit
-      (lambda (n) (string= (treesit-node-type n) "default_clock"))))
-   (when-let ((prop (treesit-node-child-by-field-name directive "property")))
-     (member (treesit-node-type prop) '("clocked_property" "clocked_sere")))))
-
 (defconst psl-ts-mode--declaration-types
   '("property_declaration" "sequence_declaration" "endpoint_declaration")
   "PSL declaration node types that introduce a name usable by directives.")
@@ -268,28 +299,54 @@ return the buffer root node instead."
   (or (psl-ts-mode--find-ancestor node "verification_unit")
       (treesit-buffer-root-node)))
 
+(defun psl-ts-mode--directive-clocked-p (directive)
+  "Return non-nil if DIRECTIVE is covered by a clock.
+A directive is clocked if its property operand is directly a
+`clocked_property' or `clocked_sere' node, or if a `default_clock'
+declaration precedes it in the same scope (see
+`psl-ts-mode--directive-scope').  A `default clock' takes effect only
+from its own declaration onwards, so one appearing after DIRECTIVE does
+not count, and one belonging to a different verification unit does not
+either."
+  (or
+   (when-let ((prop (psl-ts-mode--directive-target directive)))
+     (and (member (treesit-node-type prop) '("clocked_property" "clocked_sere"))
+          t))
+   (let ((start (treesit-node-start directive)))
+     (seq-some (lambda (n)
+                 (and (string= (treesit-node-type n) "default_clock")
+                      (< (treesit-node-start n) start)))
+               (treesit-node-children
+                (psl-ts-mode--directive-scope directive))))))
+
 (defun psl-ts-mode--scope-has-inherit-p (scope)
-  "Return non-nil if SCOPE directly contains an `inherit_declaration'.
+  "Return non-nil if an `inherit_declaration' is a direct child of SCOPE.
 SCOPE is a verification_unit (or the buffer root, which never has one)."
   (seq-some (lambda (n) (string= (treesit-node-type n) "inherit_declaration"))
             (treesit-node-children scope)))
 
 (defun psl-ts-mode--scope-declared-names (scope)
   "Return a hash set of names declared directly within SCOPE.
-Does not descend into nested `verification_unit' nodes, so a directive's
-scope only sees its own unit's declarations, not an inner or outer one's."
+Keys are down-cased, because PSL inherits VHDL's case-insensitivity; use
+`psl-ts-mode--name-declared-p' to look names up.  Does not descend into
+`verification_unit' nodes, so a top-level directive's scope (the buffer
+root) does not see names declared inside units."
   (let ((stack (treesit-node-children scope))
         (names (make-hash-table :test #'equal)))
     (while stack
       (let ((n (pop stack)))
         (cond
          ((member (treesit-node-type n) psl-ts-mode--declaration-types)
-          (puthash (treesit-node-text
-                    (treesit-node-child-by-field-name n "name") t)
-                   t names))
+          (when-let ((name (treesit-node-child-by-field-name n "name")))
+            (puthash (downcase (treesit-node-text name t)) t names)))
          ((string= (treesit-node-type n) "verification_unit"))
          (t (setq stack (append (treesit-node-children n) stack))))))
     names))
+
+(defun psl-ts-mode--name-declared-p (name names)
+  "Return non-nil if NAME is in NAMES, ignoring case.
+NAMES is a hash set as returned by `psl-ts-mode--scope-declared-names'."
+  (gethash (downcase name) names))
 
 ;;;; Mode
 

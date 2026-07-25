@@ -8,6 +8,8 @@
 
 ;; ERT tests for `psl-ts-mode'.  Require that the PSL tree-sitter
 ;; grammar has been installed (see `psl-ts-mode-install-grammar').
+;; The Flycheck checker tests additionally require Flycheck, and are
+;; skipped when it is not on the load path.
 ;;
 ;; Run with:
 ;;
@@ -28,6 +30,18 @@
      (psl-ts-mode)
      (goto-char (point-min))
      ,@body))
+
+(defun psl-ts-test--directive (&optional type)
+  "Return the first directive node of TYPE (default `assert_directive')."
+  (let ((type (or type "assert_directive")))
+    (treesit-search-subtree
+     (treesit-buffer-root-node)
+     (lambda (n) (string= (treesit-node-type n) type)))))
+
+(defun psl-ts-test--repo-directory ()
+  "Return the directory holding this test file."
+  (file-name-directory
+   (or load-file-name buffer-file-name default-directory)))
 
 (ert-deftest psl-ts-test-grammar-available ()
   "The PSL grammar should be installed for the tests to run."
@@ -205,8 +219,21 @@
            (names (psl-ts-mode--scope-declared-names scope)))
       (should (string= (treesit-node-text target t) "p2"))
       (should-not (psl-ts-mode--scope-has-inherit-p scope))
-      (should-not (gethash "p2" names))
-      (should (gethash "p1" names)))))
+      (should-not (psl-ts-mode--name-declared-p "p2" names))
+      (should (psl-ts-mode--name-declared-p "p1" names)))))
+
+(ert-deftest psl-ts-test-name-lookup-is-case-insensitive ()
+  "Declared names resolve regardless of case, as PSL is case-insensitive."
+  (skip-unless (treesit-ready-p 'psl))
+  (psl-ts-test--with-buffer
+      "vunit u (top) {\n  property My_Prop is always true;\n  assert MY_PROP;\n}\n"
+    (let* ((dir (psl-ts-test--directive))
+           (names (psl-ts-mode--scope-declared-names
+                   (psl-ts-mode--directive-scope dir))))
+      (should (psl-ts-mode--name-declared-p
+               (treesit-node-text (psl-ts-mode--directive-target dir) t)
+               names))
+      (should (psl-ts-mode--name-declared-p "my_prop" names)))))
 
 (ert-deftest psl-ts-test-declared-reference-not-flagged ()
   "A bare directive reference to a declared name is in scope's names."
@@ -219,8 +246,9 @@
                  (lambda (n) (string= (treesit-node-type n) "assert_directive"))))
            (target (psl-ts-mode--directive-target dir))
            (scope (psl-ts-mode--directive-scope dir)))
-      (should (gethash (treesit-node-text target t)
-                        (psl-ts-mode--scope-declared-names scope))))))
+      (should (psl-ts-mode--name-declared-p
+               (treesit-node-text target t)
+               (psl-ts-mode--scope-declared-names scope))))))
 
 (ert-deftest psl-ts-test-inherit-skips-undeclared-check ()
   "A verification_unit using `inherit' is detected so the check can bail out."
@@ -246,8 +274,167 @@
            (scope (psl-ts-mode--directive-scope dir)))
       (should (treesit-node-eq scope root))
       (should-not (psl-ts-mode--scope-has-inherit-p scope))
-      (should (gethash "p1" (psl-ts-mode--scope-declared-names scope)))
-      (should-not (gethash "p2" (psl-ts-mode--scope-declared-names scope))))))
+      (should (psl-ts-mode--name-declared-p
+               "p1" (psl-ts-mode--scope-declared-names scope)))
+      (should-not (psl-ts-mode--name-declared-p
+                   "p2" (psl-ts-mode--scope-declared-names scope))))))
+
+(ert-deftest psl-ts-test-top-level-default-clock ()
+  "A top-level `default clock' clocks the top-level directives after it."
+  (skip-unless (treesit-ready-p 'psl))
+  (psl-ts-test--with-buffer
+      "default clock is rising_edge(clk);\nassert always a;\n"
+    (should (psl-ts-mode--directive-clocked-p (psl-ts-test--directive)))))
+
+(ert-deftest psl-ts-test-default-clock-after-directive ()
+  "A `default clock' declared after a directive does not clock it."
+  (skip-unless (treesit-ready-p 'psl))
+  (psl-ts-test--with-buffer
+      "vunit u (top) {\n  assert always a;\n  default clock is rising_edge(clk);\n}\n"
+    (should-not (psl-ts-mode--directive-clocked-p (psl-ts-test--directive)))))
+
+(ert-deftest psl-ts-test-default-clock-of-other-unit ()
+  "A `default clock' in a sibling unit does not clock this unit's directives."
+  (skip-unless (treesit-ready-p 'psl))
+  (psl-ts-test--with-buffer
+      (concat "vunit clocked (top) {\n  default clock is rising_edge(clk);\n}\n"
+              "vunit unclocked (top) {\n  assert always a;\n}\n")
+    (should-not (psl-ts-mode--directive-clocked-p (psl-ts-test--directive)))))
+
+;;;; Grammar coverage for the case-insensitive keyword layer
+
+(ert-deftest psl-ts-test-keywords-are-case-insensitive ()
+  "PSL inherits VHDL's case-insensitivity, so keyword case must not matter."
+  (skip-unless (treesit-ready-p 'psl))
+  (dolist (content '("VUNIT u (top) {\n  ASSERT ALWAYS req;\n}\n"
+                     "Vunit u (top) {\n  Assert Always Req;\n}\n"
+                     "vunit u (top) {\n  Default Clock Is rising_edge(clk);\n}\n"))
+    (psl-ts-test--with-buffer content
+      (should-not (treesit-node-check (treesit-buffer-root-node) 'has-error))))
+  ;; ...and the tree still uses the canonical lower-case node names.
+  (psl-ts-test--with-buffer "VUNIT u (top) {\n  ASSERT ALWAYS req;\n}\n"
+    (should (psl-ts-test--directive))))
+
+(ert-deftest psl-ts-test-single-letters-are-identifiers ()
+  "X/F/G/U/W are ordinary identifiers, not reserved LTL operators."
+  (skip-unless (treesit-ready-p 'psl))
+  (psl-ts-test--with-buffer "assert always (X and F and G and U and W);\n"
+    (should-not (treesit-node-check (treesit-buffer-root-node) 'has-error))))
+
+(ert-deftest psl-ts-test-severity-and-sequence-argument ()
+  "A `severity' clause and a braced-SERE argument to `ended' both parse."
+  (skip-unless (treesit-ready-p 'psl))
+  (psl-ts-test--with-buffer
+      "assert always ended({a; b}) report \"x\" severity failure;\n"
+    (should-not (treesit-node-check (treesit-buffer-root-node) 'has-error))))
+
+;;;; Indentation
+
+(ert-deftest psl-ts-test-indent-braced-sere-and-continuation ()
+  "Multi-line braced SEREs and statement continuations are indented."
+  (skip-unless (treesit-ready-p 'psl))
+  (psl-ts-test--with-buffer
+      (concat "vunit u (dut) {\n"
+              "property p is\n"
+              "always req;\n"
+              "sequence s is {\n"
+              "req;\n"
+              "ack\n"
+              "};\n"
+              "}\n")
+    (let ((psl-ts-mode-indent-offset 2))
+      (setq-local treesit-simple-indent-rules (psl-ts-mode--indent-rules))
+      (indent-region (point-min) (point-max))
+      (should (equal (buffer-string)
+                     (concat "vunit u (dut) {\n"
+                             "  property p is\n"
+                             "    always req;\n"
+                             "  sequence s is {\n"
+                             "    req;\n"
+                             "    ack\n"
+                             "  };\n"
+                             "}\n"))))))
+
+(ert-deftest psl-ts-test-example-files-indent-stable ()
+  "Re-indenting the example files must not change them."
+  (skip-unless (treesit-ready-p 'psl))
+  (dolist (psl-file (directory-files
+                     (expand-file-name "examples" (psl-ts-test--repo-directory))
+                     t "\\.psl\\'"))
+    (with-temp-buffer
+      (insert-file-contents psl-file)
+      (psl-ts-mode)
+      (let ((before (buffer-string)))
+        (indent-region (point-min) (point-max))
+        (should (equal before (buffer-string)))))))
+
+;;;; Flycheck checker (skipped when Flycheck is unavailable)
+
+(defun psl-ts-test--lint (content)
+  "Return the `psl-treesit' diagnostics for CONTENT as (LEVEL . MESSAGE) pairs."
+  (psl-ts-test--with-buffer content
+    (mapcar (lambda (e)
+              (cons (flycheck-error-level e) (flycheck-error-message e)))
+            (psl-ts-mode--ast-lint 'psl-treesit))))
+
+(defun psl-ts-test--lint-levels (content)
+  "Return the diagnostic levels reported by `psl-treesit' for CONTENT."
+  (mapcar #'car (psl-ts-test--lint content)))
+
+(ert-deftest psl-ts-test-lint-reports-syntax-errors ()
+  "An ERROR node is reported at error level."
+  (skip-unless (and (treesit-ready-p 'psl) (require 'flycheck nil t)))
+  (require 'psl-ts-mode-flycheck)
+  (should (memq 'error (psl-ts-test--lint-levels
+                        "vunit u (top) {\n  assert $$$INVALID;\n}\n"))))
+
+(ert-deftest psl-ts-test-lint-reports-unclocked-directive ()
+  "An unclocked directive is reported at warning level, a clocked one is not."
+  (skip-unless (and (treesit-ready-p 'psl) (require 'flycheck nil t)))
+  (require 'psl-ts-mode-flycheck)
+  (should (equal '(warning)
+                 (psl-ts-test--lint-levels
+                  "vunit u (top) {\n  assert always a;\n}\n")))
+  (should-not (psl-ts-test--lint-levels
+               (concat "vunit u (top) {\n  default clock is rising_edge(clk);\n"
+                       "  assert always a;\n}\n"))))
+
+(ert-deftest psl-ts-test-lint-undeclared-name-is-opt-in ()
+  "The undeclared-name check is off by default and does not flag HDL signals."
+  (skip-unless (and (treesit-ready-p 'psl) (require 'flycheck nil t)))
+  (require 'psl-ts-mode-flycheck)
+  (let ((content (concat "vunit u (top) {\n"
+                         "  default clock is rising_edge(clk);\n"
+                         "  assert ok;\n}\n")))
+    (let ((psl-ts-mode-check-undeclared-names nil))
+      (should-not (psl-ts-test--lint-levels content)))
+    (let ((psl-ts-mode-check-undeclared-names t))
+      (should (equal '(warning) (psl-ts-test--lint-levels content))))))
+
+(ert-deftest psl-ts-test-lint-undeclared-name-ignores-case ()
+  "With the check on, a declared name matches its reference case-insensitively."
+  (skip-unless (and (treesit-ready-p 'psl) (require 'flycheck nil t)))
+  (require 'psl-ts-mode-flycheck)
+  (let ((psl-ts-mode-check-undeclared-names t))
+    (should-not (psl-ts-test--lint-levels
+                 (concat "vunit u (top) {\n"
+                         "  default clock is rising_edge(clk);\n"
+                         "  property My_Prop is always true;\n"
+                         "  assert MY_PROP;\n}\n")))))
+
+(ert-deftest psl-ts-test-lint-errors-example ()
+  "The deliberately broken example yields both an error and warnings."
+  (skip-unless (and (treesit-ready-p 'psl) (require 'flycheck nil t)))
+  (require 'psl-ts-mode-flycheck)
+  (with-temp-buffer
+    (insert-file-contents
+     (expand-file-name "examples/errors/with_errors.psl"
+                       (psl-ts-test--repo-directory)))
+    (psl-ts-mode)
+    (let ((levels (mapcar #'flycheck-error-level
+                          (psl-ts-mode--ast-lint 'psl-treesit))))
+      (should (memq 'error levels))
+      (should (memq 'warning levels)))))
 
 (provide 'psl-ts-mode-test)
 ;;; psl-ts-mode-test.el ends here

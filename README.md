@@ -48,10 +48,15 @@ For `.psl` files:
   (including parameterized `next[N]`, `next_event(b)(p)`, `forall`),
   SERE operators (including `union`, strong `{..}!`), built-in functions,
   VHDL slice expressions (`downto`/`to`), comments, strings, and numbers.
-- **Indentation** - verification-unit bodies and parameter lists, controlled by
+  Keywords are recognized in any case (`assert`, `ASSERT`, `Assert`), as PSL
+  inherits VHDL's case-insensitivity.
+- **Indentation** - verification-unit bodies, braced SEREs, statement
+  continuation lines, and parameter lists, controlled by
   `psl-ts-mode-indent-offset`.
 - **Navigation** - `imenu` and `treesit` defun navigation for verification
   units, properties, sequences, and endpoints.
+- **Diagnostics** - optional [Flycheck](https://www.flycheck.org/) integration,
+  see [Diagnostics](#diagnostics) below.
 
 ## Requirements
 
@@ -121,8 +126,10 @@ Example files covering advanced constructs:
 
 ```
 psl-ts-mode.el            the Emacs major mode
+psl-ts-mode-flycheck.el   optional Flycheck diagnostics
 psl-ts-mode-test.el       ERT test suite
 examples/sample.psl       example PSL buffer
+examples/errors/          files with deliberate errors, for the checker
 tree-sitter-psl/
   grammar.js              the PSL grammar
   src/                    generated parser (committed)
@@ -174,9 +181,16 @@ Runs synchronously on the live tree-sitter AST, requires no external tool:
 - **Syntax errors** — any `ERROR` or missing node in the parse tree is reported
   at `error` level.
 - **Unclocked directives** — `assert`/`assume`/`cover`/`restrict` directives
-  that have no `default clock is …` in the enclosing unit and no inline
-  `@ clock` expression are reported at `warning` level.  GHDL requires all
-  PSL assertions to be clocked.
+  with no inline `@ clock` expression and no preceding `default clock is …` in
+  the same scope are reported at `warning` level.  GHDL requires all PSL
+  assertions to be clocked.
+- **Undeclared names** — *opt-in*, off by default.  With
+  `psl-ts-mode-check-undeclared-names` set to `t`, a directive whose argument
+  is a bare identifier that names no property/sequence/endpoint declared in
+  the same unit is reported at `warning` level.  This is off by default
+  because `assert some_signal;` is perfectly valid PSL — a Boolean is an FL
+  property — and this checker cannot see the design's signals.  Units using
+  `inherit` are skipped entirely.
 
 ### Optional GHDL semantic check (`psl-ghdl` checker)
 
@@ -189,12 +203,13 @@ Configure per project via `.dir-locals.el`:
      (psl-ts-mode-ghdl-std          . "08"))))
 ```
 
-| Variable                          | Default  | Meaning                                      |
-|-----------------------------------|----------|----------------------------------------------|
-| `flycheck-psl-ghdl-executable`    | `"ghdl"` | Path to the GHDL binary (set by Flycheck).   |
-| `psl-ts-mode-ghdl-std`            | `"08"`   | VHDL standard (`"93"`, `"08"`, …).           |
-| `psl-ts-mode-ghdl-design-files`   | `nil`    | VHDL files to analyze alongside the `.psl`.  |
-| `psl-ts-mode-ghdl-top-entity`     | `nil`    | Top entity name (not yet used).              |
+| Variable                             | Default  | Meaning                                                    |
+|--------------------------------------|----------|------------------------------------------------------------|
+| `flycheck-psl-ghdl-executable`       | `"ghdl"` | Path to the GHDL binary (set by Flycheck).                 |
+| `psl-ts-mode-ghdl-std`               | `"08"`   | VHDL standard (`"93"`, `"08"`, …).                         |
+| `psl-ts-mode-ghdl-design-files`      | `nil`    | VHDL files to analyze alongside the `.psl`.                |
+| `psl-ts-mode-ghdl-work-directory`    | `nil`    | Where GHDL runs, and so where `work-obj*.cf` lands.        |
+| `psl-ts-mode-check-undeclared-names` | `nil`    | Enable the opt-in undeclared-name warning described above. |
 
 **GHDL limitations:** GHDL can only check PSL that is bound to a VHDL design
 (signals, ports, clocks must be resolvable).  Standalone `.psl` files without
@@ -207,6 +222,11 @@ literals.
 - PSL embedded inside VHDL (`-- psl ...` comments, inline `vunit` in `.vhd`).
 - Verilog / SystemVerilog flavors of PSL.
 - LSP / completion integration.
+- The single-letter LTL operator spellings (`X`, `F`, `G`, `U`, `W`).  The
+  VHDL flavor spells these `next`, `eventually!`, `always`, `until` and
+  `before`; leaving the aliases out keeps `X`/`F`/`G` usable as signal names.
+- `ended` is the only built-in that takes a sequence argument; the other
+  built-ins accept Boolean arguments only.
 
 ## License
 
