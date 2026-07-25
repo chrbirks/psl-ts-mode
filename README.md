@@ -194,7 +194,7 @@ Runs synchronously on the live tree-sitter AST, requires no external tool:
 
 ### Optional GHDL semantic check (`psl-ghdl` checker)
 
-Runs `ghdl -a -fpsl` when `psl-ts-mode-ghdl-design-files` is non-nil.
+Runs `ghdl -s -fpsl` when `psl-ts-mode-ghdl-design-files` is non-nil.
 Configure per project via `.dir-locals.el`:
 
 ```elisp
@@ -206,16 +206,42 @@ Configure per project via `.dir-locals.el`:
 | Variable                             | Default  | Meaning                                                    |
 |--------------------------------------|----------|------------------------------------------------------------|
 | `flycheck-psl-ghdl-executable`       | `"ghdl"` | Path to the GHDL binary (set by Flycheck).                 |
-| `psl-ts-mode-ghdl-std`               | `"08"`   | VHDL standard (`"93"`, `"08"`, …).                         |
+| `psl-ts-mode-ghdl-std`               | `"08"`   | VHDL standard: `87`, `93`, `02`, `08` or `19`.             |
 | `psl-ts-mode-ghdl-design-files`      | `nil`    | VHDL files to analyze alongside the `.psl`.                |
-| `psl-ts-mode-ghdl-work-directory`    | `nil`    | Where GHDL runs, and so where `work-obj*.cf` lands.        |
 | `psl-ts-mode-check-undeclared-names` | `nil`    | Enable the opt-in undeclared-name warning described above. |
 
-**GHDL limitations:** GHDL can only check PSL that is bound to a VHDL design
-(signals, ports, clocks must be resolvable).  Standalone `.psl` files without
-a design context will produce unresolved-identifier errors.  GHDL also requires
-all assertions to be clocked and repetition ranges to be static integer
-literals.
+`-s` (parse plus full semantic analysis) is used rather than `-a`: it reports
+the same undeclared signals, missing clocks and type errors, but skips code
+generation, so it leaves no `work-obj*.cf` in your source tree — and `ghdl -a`
+in fact aborts on a standalone vunit file with `cannot handle
+IIR_KIND_VUNIT_DECLARATION`.
+
+**Which `--std` values work:** vunit files need `08` or later.  Under `87`,
+`93` or `02` GHDL does not recognize `vunit` at all and reports *missing
+entity, architecture, package or configuration* on line 1.
+
+**VHDL-2019 (`--std=19`)** is accepted by GHDL's command line and passed
+through unchanged, so `(setq psl-ts-mode-ghdl-std "19")` works as far as this
+mode is concerned.  Whether it runs depends on your GHDL build: most packages
+ship prebuilt `std`/`ieee` libraries for v87, v93 and v08 only, and with no
+v19 libraries every check fails immediately with
+
+```
+ghdl:warning: ieee library directory '/usr/lib/ghdl/ieee/v19/' not found
+ghdl:error: cannot find "std" library
+```
+
+Check for a `v19` directory alongside the others in GHDL's library path
+(`/usr/lib/ghdl/ieee/` on most Linux distributions) before selecting it; if
+there is none, build the VHDL-2019 libraries yourself or stay on `08`.  Note
+also that GHDL's VHDL-2019 support is partial and unrelated to PSL: the PSL
+layer itself is the same under `08` and `19`.
+
+**Other GHDL limitations:** GHDL can only check PSL that is bound to a VHDL
+design (signals, ports, clocks must be resolvable).  Standalone `.psl` files
+without a design context will produce unresolved-identifier errors.  GHDL also
+requires all assertions to be clocked and repetition ranges to be static
+integer literals.
 
 ## Not yet supported
 

@@ -436,5 +436,63 @@
       (should (memq 'error levels))
       (should (memq 'warning levels)))))
 
+;;;; GHDL output parsing (no GHDL binary required)
+
+(defun psl-ts-test--ghdl-diagnostics (output)
+  "Return the diagnostics `psl-ghdl' keeps from GHDL OUTPUT.
+Runs the full parse/filter/relevance pipeline in a buffer visiting a
+real file, since Flycheck's relevance rules depend on `buffer-file-name'.
+Each element is (LINE COLUMN LEVEL MESSAGE)."
+  (let* ((file (expand-file-name "examples/sample.psl"
+                                 (psl-ts-test--repo-directory)))
+         (buffer (find-file-noselect file)))
+    (unwind-protect
+        (with-current-buffer buffer
+          (mapcar (lambda (e)
+                    (list (flycheck-error-line e)
+                          (flycheck-error-column e)
+                          (flycheck-error-level e)
+                          (flycheck-error-message e)))
+                  (flycheck-relevant-errors
+                   (flycheck-filter-errors
+                    (flycheck-parse-with-patterns
+                     (format output file) 'psl-ghdl buffer)
+                    'psl-ghdl))))
+      (kill-buffer buffer))))
+
+(ert-deftest psl-ts-test-ghdl-parses-located-diagnostics ()
+  "GHDL errors and warnings with a file:line:col prefix are parsed."
+  (skip-unless (and (treesit-ready-p 'psl) (require 'flycheck nil t)))
+  (require 'psl-ts-mode-flycheck)
+  (should (equal
+           '((3 18 error "no declaration for \"nope\"")
+             (4 3 warning "property cannot fail [-Wuseless]"))
+           (psl-ts-test--ghdl-diagnostics
+            (concat "%1$s:3:18:error: no declaration for \"nope\"\n"
+                    "%1$s:4:3:warning: property cannot fail [-Wuseless]\n")))))
+
+(ert-deftest psl-ts-test-ghdl-parses-driver-diagnostics ()
+  "Driver-level GHDL messages survive instead of being dropped.
+They carry neither a file nor a line — GHDL prefixes them with argv[0],
+which Flycheck invokes as an absolute path — and Flycheck discards
+errors without a line number unless they are given one."
+  (skip-unless (and (treesit-ready-p 'psl) (require 'flycheck nil t)))
+  (require 'psl-ts-mode-flycheck)
+  (should (equal
+           '((0 nil warning "ieee library directory '/usr/lib/ghdl/ieee/v19/' not found")
+             (0 nil error "cannot find \"std\" library"))
+           (psl-ts-test--ghdl-diagnostics
+            (concat "/usr/bin/ghdl:warning: ieee library directory"
+                    " '/usr/lib/ghdl/ieee/v19/' not found\n"
+                    "/usr/bin/ghdl:error: cannot find \"std\" library\n")))))
+
+(ert-deftest psl-ts-test-ghdl-command-uses-syntax-only-analysis ()
+  "The GHDL checker must use -s: -a cannot translate a standalone vunit."
+  (skip-unless (require 'flycheck nil t))
+  (require 'psl-ts-mode-flycheck)
+  (let ((command (flycheck-checker-get 'psl-ghdl 'command)))
+    (should (member "-s" command))
+    (should-not (member "-a" command))))
+
 (provide 'psl-ts-mode-test)
 ;;; psl-ts-mode-test.el ends here

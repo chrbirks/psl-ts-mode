@@ -51,9 +51,24 @@
 
 ;;;; Project config
 
+(defconst psl-ts-mode-ghdl-standards '("87" "93" "02" "08" "19")
+  "VHDL standards GHDL accepts for its --std= option.")
+
 (defcustom psl-ts-mode-ghdl-std "08"
-  "VHDL standard passed to GHDL via --std=.  Common values: \"93\", \"08\"."
-  :type 'string
+  "VHDL standard passed to GHDL via --std=.
+
+Standalone PSL vunit files need \"08\" or later; under \"87\"/\"93\"/\"02\"
+GHDL does not recognize `vunit' and reports \"missing entity,
+architecture, package or configuration\".
+
+\"19\" (VHDL-2019) is a valid GHDL option, but most GHDL packages ship
+prebuilt std/ieee libraries for v87/v93/v08 only, in which case every
+check fails with \"cannot find \\=\"std\\=\" library\".  Check for a v19
+directory alongside the others in GHDL's library path before selecting
+it."
+  :type `(choice ,@(mapcar (lambda (s) `(const ,s))
+                           psl-ts-mode-ghdl-standards)
+                 (string :tag "Other"))
   :safe #'stringp
   :group 'psl-ts)
 
@@ -67,15 +82,6 @@ per project via .dir-locals.el:
     . ((psl-ts-mode-ghdl-design-files . (\"../src/dut.vhd\")))))"
   :type '(repeat file)
   :safe (lambda (v) (and (listp v) (seq-every-p #'stringp v)))
-  :group 'psl-ts)
-
-(defcustom psl-ts-mode-ghdl-work-directory nil
-  "Directory GHDL runs in, or nil for the buffer's own directory.
-`ghdl -a' writes a work library file (work-obj NN .cf) into its working
-directory.  Set this to keep those build artifacts out of the source
-tree, e.g. \"../build\".  The directory is created if it does not exist."
-  :type '(choice (const :tag "Buffer's directory" nil) directory)
-  :safe (lambda (v) (or (null v) (stringp v)))
   :group 'psl-ts)
 
 (defcustom psl-ts-mode-check-undeclared-names nil
@@ -201,34 +207,49 @@ name.  No external tool required."
   "Return expanded paths for `psl-ts-mode-ghdl-design-files'."
   (mapcar #'expand-file-name psl-ts-mode-ghdl-design-files))
 
-(defun psl-ts-mode--ghdl-work-directory ()
-  "Return the directory GHDL should run in, creating it if necessary."
-  (if psl-ts-mode-ghdl-work-directory
-      (let ((dir (expand-file-name psl-ts-mode-ghdl-work-directory)))
-        (make-directory dir t)
-        dir)
-    default-directory))
+(defun psl-ts-mode--ghdl-error-filter (errors)
+  "Sanitize ERRORS and give GHDL's location-less diagnostics a line.
+Driver-level messages such as `cannot find \"std\" library' name no file
+and no line, and Flycheck drops errors without a line number, so they
+are pinned to line 0 rather than disappearing into a \"suspicious\"
+status.  `flycheck-sanitize-errors' is the filter Flycheck would apply
+by default and is kept."
+  (flycheck-fill-empty-line-numbers (flycheck-sanitize-errors errors)))
 
 (flycheck-define-checker psl-ghdl
   "Check PSL semantics using GHDL.
-Requires `psl-ts-mode-ghdl-design-files' to be set.  GHDL analyzes
-all design files alongside the current buffer file.
+Requires `psl-ts-mode-ghdl-design-files' to be set.  GHDL analyzes all
+design files alongside the current buffer file, so PSL that references
+the design's signals, ports and clocks can be resolved.
 
-Note that `ghdl -a' writes its work library (work-obj NN .cf) into
-`psl-ts-mode-ghdl-work-directory', which defaults to the buffer's
-directory; point it somewhere disposable to keep a source tree clean."
+Uses `ghdl -s' rather than `ghdl -a': -s runs the parser and full
+semantic analysis (undeclared signals, missing clocks, type errors) but
+no code generation, so it leaves no work library behind in the source
+tree.  `ghdl -a' additionally tries to translate the unit, which fails
+outright on a standalone vunit file (\"cannot handle
+IIR_KIND_VUNIT_DECLARATION\")."
   :command ("ghdl"  ; override path via M-x customize flycheck-psl-ghdl-executable
-            "-a"
+            "-s"
             (eval (concat "--std=" psl-ts-mode-ghdl-std))
             "-fpsl"
             (eval (psl-ts-mode--ghdl-design-args))
             source-inplace)
-  :working-directory (lambda (_checker) (psl-ts-mode--ghdl-work-directory))
   :error-patterns
   ((error   line-start (file-name) ":" line ":" column ":error: "   (message) line-end)
    (error   line-start (file-name) ":" line ":" column ": error: "  (message) line-end)
    (warning line-start (file-name) ":" line ":" column ":warning: " (message) line-end)
-   (warning line-start (file-name) ":" line ":" column ": warning: "(message) line-end))
+   (warning line-start (file-name) ":" line ":" column ": warning: "(message) line-end)
+   ;; Driver-level diagnostics carry no source location, e.g. the
+   ;; "cannot find \"std\" library" that a --std= without prebuilt
+   ;; libraries produces.  Without these, GHDL's non-zero exit would
+   ;; leave Flycheck in its opaque "suspicious" state instead.  GHDL
+   ;; prefixes them with argv[0], which Flycheck invokes as an absolute
+   ;; path, hence the leading wildcard.
+   (error   line-start (zero-or-more not-newline) "ghdl:error: "
+            (message) line-end)
+   (warning line-start (zero-or-more not-newline) "ghdl:warning: "
+            (message) line-end))
+  :error-filter psl-ts-mode--ghdl-error-filter
   :modes (psl-ts-mode)
   ;; `:enabled' is consulted once per buffer, `:predicate' on every check;
   ;; the design-file list can be set by .dir-locals.el after the first check,
