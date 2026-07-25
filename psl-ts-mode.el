@@ -96,6 +96,36 @@ Uses `psl-ts-mode-grammar-source' as the grammar location."
                (bound-and-true-p treesit-language-source-alist))))
     (treesit-install-language-grammar 'psl)))
 
+;;;; Grammar compatibility
+
+(defconst psl-ts-mode--grammar-probe-query
+  "[(braced_sere) (hdl_unit_binding) (severity_clause)] @node \"severity\" @kw"
+  "A query naming grammar features this file's queries depend on.
+Compiling it is how `psl-ts-mode--grammar-current-p' detects an
+installed grammar older than this version of the mode.")
+
+(defun psl-ts-mode--grammar-current-p ()
+  "Return non-nil if the installed PSL grammar matches this mode's queries.
+The grammar and the mode are versioned together in one repository, so an
+installed grammar left over from an earlier version can lack node types
+the font-lock queries reference.  Tree-sitter rejects a whole query when
+one node type in it is unknown, which silently costs most of the
+highlighting, so it is worth detecting up front."
+  (condition-case nil
+      (progn (treesit-query-compile 'psl psl-ts-mode--grammar-probe-query t) t)
+    (treesit-query-error nil)))
+
+(defun psl-ts-mode--warn-stale-grammar ()
+  "Warn that the installed PSL grammar is older than this mode."
+  (display-warning
+   'psl-ts-mode
+   (substitute-command-keys
+    "The installed PSL tree-sitter grammar is older than this version of \
+`psl-ts-mode', so syntax highlighting will be mostly missing.  Run \
+\\[psl-ts-mode-install-grammar] and restart Emacs (a grammar already \
+loaded into a running Emacs is not replaced).")
+   :warning))
+
 ;;;; Font lock
 
 (defvar psl-ts-mode--keywords
@@ -365,6 +395,8 @@ NAMES is a hash set as returned by `psl-ts-mode--scope-declared-names'."
   (if (not (treesit-ready-p 'psl t))
       (message "Tree-sitter grammar for PSL is not installed; run \
 `M-x psl-ts-mode-install-grammar'")
+    (unless (psl-ts-mode--grammar-current-p)
+      (psl-ts-mode--warn-stale-grammar))
     (treesit-parser-create 'psl)
 
     ;; Font lock.

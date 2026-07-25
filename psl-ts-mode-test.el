@@ -436,6 +436,49 @@
       (should (memq 'error levels))
       (should (memq 'warning levels)))))
 
+;;;; Grammar compatibility
+
+(ert-deftest psl-ts-test-grammar-current-p ()
+  "The bundled grammar satisfies the probe; a missing node type fails it."
+  (skip-unless (treesit-ready-p 'psl))
+  (should (psl-ts-mode--grammar-current-p))
+  (let ((psl-ts-mode--grammar-probe-query "(no_such_node_type) @x"))
+    (should-not (psl-ts-mode--grammar-current-p))))
+
+(ert-deftest psl-ts-test-font-lock-every-feature-applies ()
+  "Fontifying at the top level must produce a face from every feature.
+Tree-sitter rejects a whole query when one node type in it is unknown,
+and the queries only compile on first use, so a grammar that has drifted
+from these queries shows up as whole features silently going missing
+rather than as an error at load time."
+  (skip-unless (treesit-ready-p 'psl))
+  (let ((treesit-font-lock-level 4))
+    (psl-ts-test--with-buffer
+        (concat "-- a comment\n"
+                "vunit u (dut) {\n"
+                "  default clock is rising_edge(clk);\n"
+                "  property p is always req;\n"
+                "  chk: assert always (req -> ended(s)) report \"x\""
+                " severity error;\n"
+                "  cover {a; b[*2]};\n"
+                "}\n")
+      (font-lock-ensure)
+      (let ((faces nil))
+        (dotimes (i (- (point-max) (point-min)))
+          (push (get-text-property (+ (point-min) i) 'face) faces))
+        (setq faces (delq nil (delete-dups faces)))
+        (dolist (face '(font-lock-comment-face      ; comment
+                        font-lock-string-face       ; string
+                        font-lock-keyword-face      ; keyword / temporal
+                        font-lock-type-face         ; definition (unit name)
+                        font-lock-function-name-face ; definition (property)
+                        font-lock-variable-name-face ; label
+                        font-lock-builtin-face      ; builtin
+                        font-lock-number-face       ; number
+                        font-lock-bracket-face      ; bracket
+                        font-lock-delimiter-face))  ; delimiter
+          (should (memq face faces)))))))
+
 ;;;; GHDL output parsing (no GHDL binary required)
 
 (defun psl-ts-test--ghdl-diagnostics (output)

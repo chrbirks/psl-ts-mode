@@ -104,6 +104,36 @@ M-x psl-ts-mode-install-grammar
 
 Confirm with `(treesit-ready-p 'psl)` ⇒ `t`, then open any `.psl` file.
 
+### Troubleshooting: almost nothing is highlighted
+
+If only comments and strings are coloured and everything else is plain, the
+installed grammar is older than the mode.  The grammar and `psl-ts-mode.el`
+are versioned together, and tree-sitter rejects an entire query when a single
+node type in it is unknown, so an out-of-date grammar costs you keywords,
+names, operators and numbers all at once.  The mode warns about this on
+startup; the fix is:
+
+```
+M-x psl-ts-mode-install-grammar
+```
+
+then **restart Emacs** — a grammar already loaded into a running Emacs is not
+replaced by reinstalling it.
+
+Highlighting also depends on `treesit-font-lock-level` (default `3`):
+
+| Level | Adds                                                       |
+|-------|------------------------------------------------------------|
+| 1     | comments, strings                                          |
+| 2     | keywords, declaration names, directive labels              |
+| 3     | built-in functions, temporal/SERE operators, numbers       |
+| 4     | Boolean/arithmetic operators, brackets, delimiters         |
+
+If you see only comments and strings *and* no warning, you are on level 1;
+`(setq treesit-font-lock-level 3)` (or `4`) will fix that.  Plain signal
+references stay unhighlighted at every level — there is no way to tell an HDL
+signal from any other identifier without seeing the design.
+
 ## More examples
 
 Example files covering advanced constructs:
