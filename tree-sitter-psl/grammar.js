@@ -7,6 +7,11 @@
  * layer borrows VHDL expression syntax; this grammar implements a pragmatic
  * subset sufficient for editor syntax highlighting, indentation and navigation
  * rather than a fully conformant front-end.
+ *
+ * PSL inherits VHDL's case-insensitivity, so every keyword below is built with
+ * the `kw`/`kws` helpers, which produce a case-insensitive token aliased back
+ * to its canonical lower-case spelling. Node names in the resulting tree are
+ * therefore always lower case, whatever the source used.
  */
 
 /* eslint-disable arrow-parens */
@@ -34,6 +39,11 @@ const PREC = {
   sere_and: 5,      // & && within SERE
   sere_concat: 3,   // ; :
 };
+
+// Lexical precedence of keyword tokens over `identifier`. Because the keywords
+// are regexes rather than string literals, tree-sitter cannot apply its keyword
+// extraction optimization, so they need an explicit edge over the word token.
+const KEYWORD_PREC = 1;
 
 module.exports = grammar({
   name: 'psl',
@@ -69,16 +79,18 @@ module.exports = grammar({
     ),
 
     verification_unit: $ => seq(
-      field('kind', choice('vunit', 'vmode', 'vprop', 'vpkg')),
+      field('kind', kws('vunit', 'vmode', 'vprop', 'vpkg')),
       field('name', $.identifier),
-      optional($.inherit_clause),
+      optional($.hdl_unit_binding),
       '{',
       repeat($._vunit_item),
       '}',
       optional(';'),
     ),
 
-    inherit_clause: $ => seq(
+    // The HDL design unit a verification unit is bound to: `vunit u (dut) {..}`.
+    // Unrelated to `inherit_declaration` below.
+    hdl_unit_binding: $ => seq(
       '(',
       field('hdl_unit', sep1($._name, ',')),
       ')',
@@ -88,30 +100,29 @@ module.exports = grammar({
       $._directive,
       $.declaration,
       $.default_clock,
-      $.verification_unit,
       $.inherit_declaration,
       $.override_declaration,
     ),
 
     // Inherit_Spec ::= [nontransitive] inherit vunit_Name {, vunit_Name} ;
     inherit_declaration: $ => seq(
-      optional('nontransitive'),
-      'inherit',
+      optional(kw('nontransitive')),
+      kw('inherit'),
       sep1($._name, ','),
       ';',
     ),
 
     // Override_Spec ::= override Name_List ;
     override_declaration: $ => seq(
-      'override',
+      kw('override'),
       sep1($._name, ','),
       ';',
     ),
 
     // ----------------------------------------------------------- default clock
     default_clock: $ => seq(
-      'default', 'clock',
-      'is',
+      kw('default'), kw('clock'),
+      kw('is'),
       field('clock', $._clock_expr),
       ';',
     ),
@@ -132,15 +143,16 @@ module.exports = grammar({
 
     assert_directive: $ => seq(
       optional($._directive_label),
-      'assert',
+      kw('assert'),
       field('property', $._property),
       optional($.report_clause),
+      optional($.severity_clause),
       ';',
     ),
 
     assume_directive: $ => seq(
       optional($._directive_label),
-      choice('assume', 'assume_guarantee'),
+      kws('assume', 'assume_guarantee'),
       field('property', $._property),
       ';',
     ),
@@ -150,14 +162,14 @@ module.exports = grammar({
     // concatenation is not used here, and allowing it would make the
     // terminating `;` ambiguous with a following directive label.
     _directive_sequence: $ => choice(
-      $._braced_sere,
+      $.braced_sere,
       $.clocked_sere,
       $._boolean,
     ),
 
     cover_directive: $ => seq(
       optional($._directive_label),
-      'cover',
+      kw('cover'),
       field('sequence', $._directive_sequence),
       optional($.report_clause),
       ';',
@@ -165,7 +177,7 @@ module.exports = grammar({
 
     restrict_directive: $ => seq(
       optional($._directive_label),
-      choice('restrict', 'restrict!'),
+      choice(kw('restrict'), kw('restrict!')),
       field('sequence', $._directive_sequence),
       ';',
     ),
@@ -176,20 +188,26 @@ module.exports = grammar({
       optional($._directive_label),
       choice(
         seq(
-          optional(choice('strong', 'weak')),
-          'fairness',
+          optional(kws('strong', 'weak')),
+          kw('fairness'),
           $._boolean,
           optional(seq(',', $._boolean)),
         ),
         seq(
-          'strong_fairness',
+          kw('strong_fairness'),
           $._boolean, ',', $._boolean,
         ),
       ),
       ';',
     ),
 
-    report_clause: $ => seq('report', $.string_literal),
+    report_clause: $ => seq(kw('report'), $.string_literal),
+
+    // VHDL severity clause, accepted by GHDL on PSL assertions.
+    severity_clause: $ => seq(
+      kw('severity'),
+      field('level', kws('note', 'warning', 'error', 'failure')),
+    ),
 
     // ----------------------------------------------------------- declarations
     declaration: $ => choice(
@@ -199,28 +217,28 @@ module.exports = grammar({
     ),
 
     property_declaration: $ => seq(
-      'property',
+      kw('property'),
       field('name', $.identifier),
       optional($.formal_parameter_list),
-      'is',
+      kw('is'),
       field('definition', $._property),
       ';',
     ),
 
     sequence_declaration: $ => seq(
-      'sequence',
+      kw('sequence'),
       field('name', $.identifier),
       optional($.formal_parameter_list),
-      'is',
+      kw('is'),
       field('definition', $._sere),
       ';',
     ),
 
     endpoint_declaration: $ => seq(
-      'endpoint',
+      kw('endpoint'),
       field('name', $.identifier),
       optional($.formal_parameter_list),
-      'is',
+      kw('is'),
       field('definition', $._sere),
       ';',
     ),
@@ -236,9 +254,9 @@ module.exports = grammar({
     // no longer be lexed as an identifier anywhere in a .psl file. These are
     // VHDL type names rather than typical signal names, so the impact is small.
     formal_parameter: $ => seq(
-      optional(choice('const', 'mutable')),
-      optional(choice('boolean', 'bit', 'bitvector', 'numeric', 'string',
-                      'property', 'sequence', 'hdltype')),
+      optional(kws('const', 'mutable')),
+      optional(kws('boolean', 'bit', 'bitvector', 'numeric', 'string',
+                   'property', 'sequence', 'hdltype')),
       sep1($.identifier, ','),
     ),
 
@@ -257,9 +275,9 @@ module.exports = grammar({
 
     // forall replicated property
     replicated_property: $ => prec.right(seq(
-      'forall',
+      kw('forall'),
       field('param', $.identifier),
-      optional(seq('in', $._value_set)),
+      optional(seq(kw('in'), $._value_set)),
       ':',
       field('property', $._property),
     )),
@@ -270,13 +288,13 @@ module.exports = grammar({
     ),
 
     _value_range: $ => choice(
-      seq($._number, 'to', $._number),
+      seq($._number, kw('to'), $._number),
       $._boolean,
     ),
 
     _fl_property: $ => choice(
       $._boolean,
-      $._braced_sere,
+      $.braced_sere,
       $.unary_temporal,
       $.next_event_property,
       $.binary_temporal,
@@ -308,17 +326,20 @@ module.exports = grammar({
       field('operand', $._fl_property),
     )),
 
-    temporal_unary_op: _ => choice(
+    // The single-letter LTL spellings (X, F, G, U, W) are deliberately absent:
+    // `word: $ => $.identifier` would reserve them globally, and `X`/`F`/`G`
+    // are plausible HDL signal names. The VHDL flavor spells these
+    // `next`/`eventually!`/`always`/`until`/`before`.
+    temporal_unary_op: _ => kws(
       'always', 'never',
       'next', 'next!',
       'next_a', 'next_a!', 'next_e', 'next_e!',
       'eventually!',
-      'X', 'X!', 'F', 'G',
     ),
 
     // next_event family: next_event(b)(p), next_event_a(b)[k](p), etc.
     next_event_property: $ => prec.right(seq(
-      field('operator', choice(
+      field('operator', kws(
         'next_event', 'next_event!',
         'next_event_a', 'next_event_a!',
         'next_event_e', 'next_event_e!',
@@ -338,31 +359,30 @@ module.exports = grammar({
       field('right', $._fl_property),
     )),
 
-    temporal_binary_op: _ => choice(
+    temporal_binary_op: _ => kws(
       'until', 'until!', 'until_', 'until_!',
       'before', 'before!', 'before_', 'before_!',
-      'U', 'W',
     ),
 
     suffix_implication: $ => prec.right(PREC.suffix_impl, seq(
       field('antecedent', $._sere),
       field('operator', choice('|->', '|=>')),
-      field('consequent', choice($._fl_property, $._braced_sere)),
+      field('consequent', choice($._fl_property, $.braced_sere)),
     )),
 
     abort_property: $ => prec.left(PREC.abort, seq(
       field('property', $._fl_property),
-      field('operator', choice('abort', 'async_abort', 'sync_abort')),
+      field('operator', kws('abort', 'async_abort', 'sync_abort')),
       field('condition', $._boolean),
     )),
 
     // Strong sequence: {..}!
-    strong_sequence: $ => prec(1, seq($._braced_sere, '!')),
+    strong_sequence: $ => prec(1, seq($.braced_sere, '!')),
 
     // -------------------------------------------------------------------- SEREs
     _sere: $ => choice(
       $._boolean,
-      $._braced_sere,
+      $.braced_sere,
       $.sere_concat,
       $.sere_or,
       $.sere_union,
@@ -372,9 +392,11 @@ module.exports = grammar({
       $.clocked_sere,
     ),
 
-    _braced_sere: $ => seq('{', sep1($._sere, ';'), '}'),
+    // Kept visible (rather than hidden behind a leading underscore) so that
+    // editors have a node to anchor indentation of multi-line `{ .. }` on.
+    braced_sere: $ => seq('{', sep1($._sere, ';'), '}'),
 
-    clocked_sere: $ => prec.left(seq($._braced_sere, '@', $._clock_expr)),
+    clocked_sere: $ => prec.left(seq($.braced_sere, '@', $._clock_expr)),
 
     sere_concat: $ => prec.left(PREC.sere_concat, seq(
       $._sere, choice(';', ':'), $._sere,
@@ -382,14 +404,14 @@ module.exports = grammar({
 
     sere_or: $ => prec.left(PREC.sere_or, seq($._sere, '|', $._sere)),
 
-    sere_union: $ => prec.left(PREC.sere_or, seq($._sere, 'union', $._sere)),
+    sere_union: $ => prec.left(PREC.sere_or, seq($._sere, kw('union'), $._sere)),
 
     sere_and: $ => prec.left(PREC.sere_and, seq(
       $._sere, choice('&', '&&'), $._sere,
     )),
 
     sere_within: $ => prec.left(PREC.sere_or, seq(
-      $._sere, 'within', $._sere,
+      $._sere, kw('within'), $._sere,
     )),
 
     sere_repetition: $ => prec(PREC.unary, seq(
@@ -408,7 +430,7 @@ module.exports = grammar({
     // `const` formal parameter: next[n], valid[*2 to depth].
     _count: $ => choice(
       $._boolean,
-      seq($._boolean, 'to', choice($._boolean, 'inf')),
+      seq($._boolean, kw('to'), choice($._boolean, kw('inf'))),
     ),
 
     // ----------------------------------------- Boolean layer (VHDL expressions)
@@ -423,17 +445,17 @@ module.exports = grammar({
     paren_expression: $ => seq('(', $._boolean, ')'),
 
     unary_expression: $ => prec(PREC.not, seq(
-      field('operator', choice('not', '-', '+', 'abs')),
+      field('operator', choice(kw('not'), '-', '+', kw('abs'))),
       field('operand', $._boolean),
     )),
 
     binary_expression: $ => {
       const table = [
-        [PREC.or, choice('or', 'nor', 'xor', 'xnor', '||')],
-        [PREC.and, choice('and', 'nand', '&&')],
+        [PREC.or, choice(kw('or'), kw('nor'), kw('xor'), kw('xnor'), '||')],
+        [PREC.and, choice(kw('and'), kw('nand'), '&&')],
         [PREC.equality, choice('=', '/=', '<', '<=', '>', '>=', '==')],
         [PREC.add, choice('+', '-', '&')],
-        [PREC.mul, choice('*', '/', 'mod', 'rem')],
+        [PREC.mul, choice('*', '/', kw('mod'), kw('rem'))],
         [PREC.power, '**'],
       ];
       return choice(...table.map(([precedence, operator]) =>
@@ -444,18 +466,17 @@ module.exports = grammar({
         ))));
     },
 
+    // `ended` takes a Sequence argument, so a braced SERE is accepted here
+    // alongside Boolean arguments: both `ended(seq_name)` and `ended({a;b})`
+    // parse.
     builtin_call: $ => seq(
       field('function', $.builtin_function),
       '(',
-      sep1($._boolean, ','),
+      sep1(choice($._boolean, $.braced_sere), ','),
       ')',
     ),
 
-    // NOTE: `ended` actually takes a Sequence argument, but `builtin_call`
-    // accepts only Boolean arguments, so `ended(seq_name)` parses while an
-    // inline braced-SERE argument like `ended({a;b})` does not. Acceptable
-    // under this pragmatic editor-grammar subset.
-    builtin_function: _ => choice(
+    builtin_function: _ => kws(
       'prev', 'stable', 'rose', 'fell', 'ended',
       'countones', 'onehot', 'onehot0', 'isunknown',
       'nondet', 'nondet_vector',
@@ -485,7 +506,9 @@ module.exports = grammar({
       $._name, '(', sep1(choice($.range_constraint, $._boolean), ','), ')',
     )),
 
-    range_constraint: $ => seq($._boolean, choice('to', 'downto'), $._boolean),
+    range_constraint: $ => seq(
+      $._boolean, kws('to', 'downto'), $._boolean,
+    ),
 
     attribute_name: $ => prec.left(seq(
       $._name, "'", $.identifier,
@@ -511,7 +534,7 @@ module.exports = grammar({
 
     string_literal: _ => token(/"([^"\\]|\\.|"")*"/),
 
-    boolean_literal: _ => choice('true', 'false'),
+    boolean_literal: _ => kws('true', 'false'),
 
     identifier: _ => /[a-zA-Z][a-zA-Z0-9_]*|\\[^\\]+\\/,
   },
@@ -525,4 +548,28 @@ module.exports = grammar({
  */
 function sep1(rule, separator) {
   return seq(rule, repeat(seq(separator, rule)));
+}
+
+/**
+ * Creates a case-insensitive keyword token that still appears in the tree
+ * under its canonical (lower-case) spelling, so that editor queries can match
+ * on the literal keyword regardless of how it was written in the source.
+ * @param {string} word canonical lower-case spelling
+ * @returns {AliasRule}
+ */
+function kw(word) {
+  const pattern = word
+    .split('')
+    .map(c => (/[a-z]/.test(c) ? `[${c}${c.toUpperCase()}]` : c.replace(/[.*+?^${}()|[\]\\!]/g, '\\$&')))
+    .join('');
+  return alias(token(prec(KEYWORD_PREC, new RegExp(pattern))), word);
+}
+
+/**
+ * `choice` over `kw` for each of the given keywords.
+ * @param {...string} words
+ * @returns {ChoiceRule}
+ */
+function kws(...words) {
+  return choice(...words.map(kw));
 }

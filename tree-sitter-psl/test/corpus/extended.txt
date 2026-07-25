@@ -108,9 +108,10 @@ cover {req union grant};
 
 (source_file
   (cover_directive
-    (sere_union
-      (identifier)
-      (identifier))))
+    (braced_sere
+      (sere_union
+        (identifier)
+        (identifier)))))
 
 ================================================================================
 Sequence as FL property (braced SERE assert)
@@ -122,9 +123,10 @@ assert {a; b};
 
 (source_file
   (assert_directive
-    (sere_concat
-      (identifier)
-      (identifier))))
+    (braced_sere
+      (sere_concat
+        (identifier)
+        (identifier)))))
 
 ================================================================================
 Strong sequence
@@ -137,9 +139,10 @@ assert {req; ack}!;
 (source_file
   (assert_directive
     (strong_sequence
-      (sere_concat
-        (identifier)
-        (identifier)))))
+      (braced_sere
+        (sere_concat
+          (identifier)
+          (identifier))))))
 
 ================================================================================
 VHDL downto slice
@@ -198,8 +201,142 @@ assert {valid[*2 to depth]};
 
 (source_file
   (assert_directive
-    property: (sere_repetition
+    property: (braced_sere
+      (sere_repetition
+        (identifier)
+        (repeat_count
+          (integer)
+          (identifier))))))
+
+================================================================================
+Upper-case keywords (PSL is case-insensitive)
+================================================================================
+
+VUNIT u (top) {
+  DEFAULT CLOCK IS rising_edge(clk);
+  ASSERT ALWAYS (req -> EVENTUALLY! grant);
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (verification_unit
+    name: (identifier)
+    (hdl_unit_binding
+      hdl_unit: (identifier))
+    (default_clock
+      clock: (indexed_name
+        (identifier)
+        (identifier)))
+    (assert_directive
+      property: (unary_temporal
+        operator: (temporal_unary_op)
+        operand: (paren_property
+          (logical_implication
+            left: (identifier)
+            right: (unary_temporal
+              operator: (temporal_unary_op)
+              operand: (identifier))))))))
+
+================================================================================
+Mixed-case keywords
+================================================================================
+
+Assert Always Req;
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (assert_directive
+    property: (unary_temporal
+      operator: (temporal_unary_op)
+      operand: (identifier))))
+
+================================================================================
+Single letters are ordinary identifiers, not LTL operators
+================================================================================
+
+assert always (X and F and G and U and W);
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (assert_directive
+    property: (unary_temporal
+      operator: (temporal_unary_op)
+      operand: (paren_expression
+        (binary_expression
+          left: (binary_expression
+            left: (binary_expression
+              left: (binary_expression
+                left: (identifier)
+                right: (identifier))
+              right: (identifier))
+            right: (identifier))
+          right: (identifier))))))
+
+================================================================================
+Severity clause
+================================================================================
+
+assert always a report "boom" severity failure;
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (assert_directive
+    property: (unary_temporal
+      operator: (temporal_unary_op)
+      operand: (identifier))
+    (report_clause
+      (string_literal))
+    (severity_clause)))
+
+================================================================================
+ended() with an inline braced SERE
+================================================================================
+
+assert always ended({a; b});
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (assert_directive
+    property: (unary_temporal
+      operator: (temporal_unary_op)
+      operand: (builtin_call
+        function: (builtin_function)
+        (braced_sere
+          (sere_concat
+            (identifier)
+            (identifier)))))))
+
+================================================================================
+Inherit and override declarations
+================================================================================
+
+vunit u (top) {
+  nontransitive inherit base1, base2;
+  override sig1;
+  endpoint e is {a; b};
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (verification_unit
+    name: (identifier)
+    (hdl_unit_binding
+      hdl_unit: (identifier))
+    (inherit_declaration
       (identifier)
-      (repeat_count
-        (integer)
-        (identifier)))))
+      (identifier))
+    (override_declaration
+      (identifier))
+    (declaration
+      (endpoint_declaration
+        name: (identifier)
+        definition: (braced_sere
+          (sere_concat
+            (identifier)
+            (identifier)))))))

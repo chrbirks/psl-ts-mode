@@ -19,6 +19,7 @@
   "restrict" "restrict!" "fairness" "strong_fairness"
   "property" "sequence" "endpoint"
   "default" "clock" "is" "report"
+  "severity" "note" "warning" "error" "failure"
   "strong" "weak"
   "const" "mutable" "boolean" "hdltype"
   "bit" "bitvector" "numeric" "string"

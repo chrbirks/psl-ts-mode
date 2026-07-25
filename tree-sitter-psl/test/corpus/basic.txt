@@ -12,7 +12,7 @@ vunit u (top) {
 (source_file
   (verification_unit
     (identifier)
-    (inherit_clause
+    (hdl_unit_binding
       (identifier))
     (default_clock
       (indexed_name
@@ -53,13 +53,15 @@ assert {req; ack} |=> {grant[*2]};
 (source_file
   (assert_directive
     (suffix_implication
-      (sere_concat
-        (identifier)
-        (identifier))
-      (sere_repetition
-        (identifier)
-        (repeat_count
-          (integer))))))
+      (braced_sere
+        (sere_concat
+          (identifier)
+          (identifier)))
+      (braced_sere
+        (sere_repetition
+          (identifier)
+          (repeat_count
+            (integer)))))))
 
 ================================================================================
 Property and sequence declarations
@@ -85,11 +87,12 @@ sequence s is {a; b; c};
   (declaration
     (sequence_declaration
       (identifier)
-      (sere_concat
+      (braced_sere
         (sere_concat
-          (identifier)
-          (identifier))
-        (identifier)))))
+          (sere_concat
+            (identifier)
+            (identifier))
+          (identifier))))))
 
 ================================================================================
 Cover, assume, restrict, fairness directives
@@ -104,9 +107,10 @@ fairness grant;
 
 (source_file
   (cover_directive
-    (sere_concat
-      (identifier)
-      (identifier)))
+    (braced_sere
+      (sere_concat
+        (identifier)
+        (identifier))))
   (assume_directive
     (unary_temporal
       (temporal_unary_op)
@@ -116,9 +120,10 @@ fairness grant;
           (unary_expression
             (identifier))))))
   (restrict_directive
-    (sere_repetition
-      (identifier)
-      (repeat_count
-        (integer))))
+    (braced_sere
+      (sere_repetition
+        (identifier)
+        (repeat_count
+          (integer)))))
   (fairness_directive
     (identifier)))
