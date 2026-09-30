@@ -104,14 +104,17 @@ M-x psl-ts-mode-install-grammar
 
 Confirm with `(treesit-ready-p 'psl)` ⇒ `t`, then open any `.psl` file.
 
-### Troubleshooting: almost nothing is highlighted
+### Troubleshooting: keywords are not highlighted
 
-If only comments and strings are coloured and everything else is plain, the
-installed grammar is older than the mode.  The grammar and `psl-ts-mode.el`
-are versioned together, and tree-sitter rejects an entire query when a single
-node type in it is unknown, so an out-of-date grammar costs you keywords,
-names, operators and numbers all at once.  The mode warns about this on
-startup; the fix is:
+If comments, strings, names and numbers are coloured but keywords such as
+`vunit`, `assert` or `severity` are plain, the installed grammar is older
+than the mode.  The grammar and `psl-ts-mode.el` are versioned together, and
+tree-sitter rejects an entire query when a single node type in it is
+unknown, so an out-of-date grammar drops every highlighting feature whose
+query mentions something it lacks (with the grammars published so far, that
+is the `keyword` feature).  The mode warns about this when a `.psl` buffer
+enters `psl-ts-mode` on Emacs 29 and 30; Emacs 31 detects the mismatch
+itself and shows its own warning.  The fix is:
 
 ```
 M-x psl-ts-mode-install-grammar

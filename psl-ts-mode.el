@@ -96,36 +96,6 @@ Uses `psl-ts-mode-grammar-source' as the grammar location."
                (bound-and-true-p treesit-language-source-alist))))
     (treesit-install-language-grammar 'psl)))
 
-;;;; Grammar compatibility
-
-(defconst psl-ts-mode--grammar-probe-query
-  "[(braced_sere) (hdl_unit_binding) (severity_clause)] @node \"severity\" @kw"
-  "A query naming grammar features this file's queries depend on.
-Compiling it is how `psl-ts-mode--grammar-current-p' detects an
-installed grammar older than this version of the mode.")
-
-(defun psl-ts-mode--grammar-current-p ()
-  "Return non-nil if the installed PSL grammar matches this mode's queries.
-The grammar and the mode are versioned together in one repository, so an
-installed grammar left over from an earlier version can lack node types
-the font-lock queries reference.  Tree-sitter rejects a whole query when
-one node type in it is unknown, which silently costs most of the
-highlighting, so it is worth detecting up front."
-  (condition-case nil
-      (progn (treesit-query-compile 'psl psl-ts-mode--grammar-probe-query t) t)
-    (treesit-query-error nil)))
-
-(defun psl-ts-mode--warn-stale-grammar ()
-  "Warn that the installed PSL grammar is older than this mode."
-  (display-warning
-   'psl-ts-mode
-   (substitute-command-keys
-    "The installed PSL tree-sitter grammar is older than this version of \
-`psl-ts-mode', so syntax highlighting will be mostly missing.  Run \
-\\[psl-ts-mode-install-grammar] and restart Emacs (a grammar already \
-loaded into a running Emacs is not replaced).")
-   :warning))
-
 ;;;; Font lock
 
 (defvar psl-ts-mode--keywords
@@ -217,6 +187,61 @@ loaded into a running Emacs is not replaced).")
    :feature 'delimiter
    '(([";" "," ":" "." "'"]) @font-lock-delimiter-face))
   "Tree-sitter font-lock settings for `psl-ts-mode'.")
+
+;;;; Grammar compatibility
+
+(defvar psl-ts-mode--grammar-status nil
+  "Result of the once-per-session stale-grammar check.
+nil until `psl-ts-mode--check-grammar' has run, then `current' or
+`stale'.  A grammar loaded into a running Emacs is never replaced, so
+one check per session is enough.")
+
+(defun psl-ts-mode--broken-font-lock-features (&optional settings)
+  "Return the font-lock features whose queries the installed grammar rejects.
+SETTINGS is a list of `treesit-font-lock-rules' settings and defaults to
+`psl-ts-mode--font-lock-settings'.  Each query is run once against an
+empty buffer, which forces its otherwise lazy compilation; the features
+whose query names a node type or token the grammar does not know are
+returned, in order."
+  (with-temp-buffer
+    (let (broken)
+      (dolist (setting (or settings psl-ts-mode--font-lock-settings))
+        (condition-case nil
+            (treesit-query-capture 'psl (elt setting 0))
+          (treesit-query-error (push (elt setting 2) broken))))
+      (nreverse broken))))
+
+(defun psl-ts-mode--grammar-current-p (&optional settings)
+  "Return non-nil if the installed PSL grammar accepts every font-lock query.
+The grammar and the mode are versioned together in one repository, so an
+installed grammar left over from an earlier version can lack node types
+the font-lock queries reference.  Tree-sitter rejects a whole query when
+one node type in it is unknown, which drops that feature's highlighting.
+SETTINGS is as for `psl-ts-mode--broken-font-lock-features'."
+  (null (psl-ts-mode--broken-font-lock-features settings)))
+
+(defun psl-ts-mode--warn-stale-grammar (features)
+  "Warn that the installed PSL grammar is older than this mode.
+FEATURES are the font-lock features whose queries it rejects."
+  (display-warning
+   'psl-ts-mode
+   (substitute-command-keys
+    (format "The installed PSL tree-sitter grammar is older than this \
+version of `psl-ts-mode' and rejects the highlighting queries for: %s.  \
+Run \\[psl-ts-mode-install-grammar] and restart Emacs (a grammar already \
+loaded into a running Emacs is not replaced)."
+            (mapconcat #'symbol-name features ", ")))
+   :warning))
+
+(defun psl-ts-mode--check-grammar ()
+  "Check the installed grammar against the font-lock queries, once per session.
+Warns if the first check finds the grammar stale; later calls do nothing,
+since the loaded grammar cannot change within a session."
+  (unless psl-ts-mode--grammar-status
+    (let ((broken (psl-ts-mode--broken-font-lock-features)))
+      (setq psl-ts-mode--grammar-status (if broken 'stale 'current))
+      (when broken
+        (psl-ts-mode--warn-stale-grammar broken)))))
 
 ;;;; Indentation
 
@@ -395,8 +420,11 @@ NAMES is a hash set as returned by `psl-ts-mode--scope-declared-names'."
   (if (not (treesit-ready-p 'psl t))
       (message "Tree-sitter grammar for PSL is not installed; run \
 `M-x psl-ts-mode-install-grammar'")
-    (unless (psl-ts-mode--grammar-current-p)
-      (psl-ts-mode--warn-stale-grammar))
+    ;; Emacs 31 validates the font-lock queries itself in
+    ;; `treesit-major-mode-setup' and warns about a mismatch; Emacs 29
+    ;; and 30 compile them lazily and just drop the affected feature.
+    (unless (fboundp 'treesit-validate-and-compile-font-lock-rules)
+      (psl-ts-mode--check-grammar))
     (treesit-parser-create 'psl)
 
     ;; Font lock.

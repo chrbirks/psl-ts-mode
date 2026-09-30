@@ -18,6 +18,7 @@
 
 ;;; Code:
 
+(require 'cl-lib)
 (require 'ert)
 (require 'treesit)
 (require 'psl-ts-mode)
@@ -439,25 +440,50 @@
 ;;;; Grammar compatibility
 
 (ert-deftest psl-ts-test-grammar-current-p ()
-  "The bundled grammar satisfies the probe; a missing node type fails it."
+  "The bundled grammar accepts every font-lock query; an unknown node fails."
   (skip-unless (treesit-ready-p 'psl))
   (should (psl-ts-mode--grammar-current-p))
-  (let ((psl-ts-mode--grammar-probe-query "(no_such_node_type) @x"))
-    (should-not (psl-ts-mode--grammar-current-p))))
+  (should-not (psl-ts-mode--broken-font-lock-features))
+  (let ((settings (treesit-font-lock-rules
+                   :language 'psl
+                   :feature 'bogus
+                   "(no_such_node_type) @x"
+                   :language 'psl
+                   :feature 'comment
+                   '((comment) @font-lock-comment-face))))
+    (should-not (psl-ts-mode--grammar-current-p settings))
+    (should (equal (psl-ts-mode--broken-font-lock-features settings)
+                   '(bogus)))))
+
+(ert-deftest psl-ts-test-check-grammar-warns-once ()
+  "A stale grammar is reported once per session, not once per buffer."
+  (let ((psl-ts-mode--grammar-status nil)
+        (warnings 0))
+    (cl-letf (((symbol-function 'psl-ts-mode--broken-font-lock-features)
+               (lambda (&optional _settings) '(keyword)))
+              ((symbol-function 'psl-ts-mode--warn-stale-grammar)
+               (lambda (features)
+                 (should (equal features '(keyword)))
+                 (cl-incf warnings))))
+      (psl-ts-mode--check-grammar)
+      (psl-ts-mode--check-grammar)
+      (should (eq psl-ts-mode--grammar-status 'stale))
+      (should (= warnings 1)))))
 
 (ert-deftest psl-ts-test-font-lock-every-feature-applies ()
   "Fontifying at the top level must produce a face from every feature.
 Tree-sitter rejects a whole query when one node type in it is unknown,
-and the queries only compile on first use, so a grammar that has drifted
-from these queries shows up as whole features silently going missing
-rather than as an error at load time."
+and Emacs 29 and 30 only compile the queries on first use, so a grammar
+that has drifted from these queries shows up there as a whole feature
+going missing with no error at load time (Emacs 31 validates the queries
+itself and warns)."
   (skip-unless (treesit-ready-p 'psl))
   (let ((treesit-font-lock-level 4))
     (psl-ts-test--with-buffer
         (concat "-- a comment\n"
                 "vunit u (dut) {\n"
                 "  default clock is rising_edge(clk);\n"
-                "  property p is always req;\n"
+                "  property p is always ((req and not ack = '1') or true);\n"
                 "  chk: assert always (req -> ended(s)) report \"x\""
                 " severity error;\n"
                 "  cover {a; b[*2]};\n"
@@ -474,6 +500,8 @@ rather than as an error at load time."
                         font-lock-function-name-face ; definition (property)
                         font-lock-variable-name-face ; label
                         font-lock-builtin-face      ; builtin
+                        font-lock-constant-face     ; builtin (boolean)
+                        font-lock-operator-face     ; operator
                         font-lock-number-face       ; number
                         font-lock-bracket-face      ; bracket
                         font-lock-delimiter-face))  ; delimiter
